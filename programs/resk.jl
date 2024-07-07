@@ -1185,25 +1185,19 @@ Builds the next generation in infinite-sites expansions, i.e. advances the world
 
 ---
 
-Output 1: a changed `pnt_wld_ms1` = a spatial array of demes that contain individuals' left monosome [Bool] arrays
+Output 1: a changed `pnt_wld` = a spatial array of demes that contain individuals' segr. regions [Float] arrays
 
-Output 2: a changed `pnt_wld_ms2` = a spatial array of demes that contain individuals' right monosome [Bool] arrays
+Output 2: a spatial array of demes with average fitness in the new generation
 
-Output 3: a spatial array of demes with average fitness in the new generation
+Output 3: a spatial array of demes with populations in the new generation
 
-Output 4: a spatial array of demes with populations in the new generation
+Output 4: a spatial array of demes with average deleterious selected mutation count in the new generation
 
-Output 5: a spatial array of demes with average selected AA mutation count in the new generation
+Output 5: a spatial array of demes with average beneficial selected mutation count in the new generation
 
-Output 6: a spatial array of demes with average selected Aa mutation count in the new generation
+Output 6: a spatial array of demes with average deleterious neutral mutation count in the new generation
 
-Output 7: a spatial array of demes with average selected aa mutation count in the new generation
-
-Output 8: a spatial array of demes with average neutral AA mutation count in the new generation
-
-Output 9: a spatial array of demes with average neutral Aa mutation count in the new generation
-
-Output 10: a spatial array of demes with average neutral aa mutation count in the new generation
+Output 7: a spatial array of demes with average beneficial neutral mutation count in the new generation
 """
 @inbounds function build_next_gen_inf(
     pnt_wld::Array{Array{Array{Float32}}},
@@ -1354,17 +1348,13 @@ Creates an empty world (deme space) with infinite-sites individual structure. 2-
 
 `max`: a tuple of space bounds (maximal coordinates)
 
-`min`: a tuple of space bounds (minimal coordinates). Limited to (1,1) for now
-
 `name`: world name
 
 `k_capacity`: capacity of each deme
 
 `r_prolif_rate`: proliferation rate
 
-`n_loci`: number of loci
-
-`n_sel_loci`: number of selected loci
+`n_segr_regions`: number of segregating regions
 
 `mut_rate`: genome-wide mutation rate
 
@@ -1381,13 +1371,11 @@ Creates an empty world (deme space) with infinite-sites individual structure. 2-
 
 `h_domin_coef`: dominance coefficient (in heterozygous loci, new_fitness *= **1 -** `h_domin_coef` * `s_sel_coef`)
 
-`prop_of_del_muts`: proportion of deleterious mutations in nature
+`prop_of_sel_loci`: proportion of selected loci within segr. regions
 
 ---
 
-Output 1: a spatial array of demes that contain individuals' left monosome [Bool] arrays (all empty)
-
-Output 2: a spatial array of demes that contain individuals' right monosome [Bool] arrays (all empty)
+Output 1: a spatial array of demes that contain individuals' segr. regions [Float] arrays (all empty)
 
 Output 3: world stats Dict
 
@@ -1435,9 +1423,7 @@ Fills random demes within given monosome arrays with infinite-sites individuals.
 
 ---
 
-`pnt_wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays
-
-`pnt_wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays
+`pnt_wld`: a spatial array of demes that contain individuals' segr. regions [Float] arrays
 
 `pnt_wld_stats`: world stats Dict
 
@@ -1449,11 +1435,11 @@ Fills random demes within given monosome arrays with infinite-sites individuals.
 function fill_random_demes_inf(
     pnt_wld::Array{Array{Array{Float32}}},
     pnt_wld_stats,
-    max_fill::Vector{UnitRange{Int64}},
+    fill::Vector{UnitRange{Int64}},
     n_demes_to_fill = DEF_N_DEMES_STARTFILL,
-) # ::Array{Array{Array{Bool}}}
+)
 
-    possible_init_coords = [collect(x) for x in Iterators.product(max_fill...)]
+    possible_init_coords = [collect(x) for x in Iterators.product(fill...)]
     init_coords = sample(possible_init_coords, n_demes_to_fill; replace = false)
 
     for coord in init_coords
@@ -1465,7 +1451,7 @@ function fill_random_demes_inf(
         end
     end
 
-    pnt_wld_stats["startfill"] = copy(max_fill)
+    pnt_wld_stats["startfill"] = copy(fill)
     pnt_wld_stats["n_demes_startfill"] = n_demes_to_fill
 end
 
@@ -1498,18 +1484,18 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 `data_to_generate`: string of letters representing different data to output. Possible values:
 - **F** - deme-average fitness (**fitn**)
 - **P** - deme populations (**pops**)
-- **S** - deme-average number of homo- and heterozygous selected loci (**AAsel**, **Aasel** and **aasel**)
-- **M** - deme-average number of homo- and heterozygous neutral loci (**AAneu**, **Aaneu** and **aaneu**)
+- **S** - deme-average number of deleterious and beneficial selected loci (**delsel** and **bensel**)
+- **M** - deme-average number of deleterious and beneficial selected loci (**delneu** and **benneu**)
 
 If starting from existing world, also provide:
 
-`wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays
-
-`wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays
+`wld`: a spatial array of demes that contain individuals' segr. regions [Float] arrays
 
 `wld_stats`: world stats Dict
 
 `name`: world name
+
+`prop_of_sel_loci`: proportion of selected loci within segr. regions
 
 `bottleneck`: if not **NaN**, a tuple of bottleneck coordinates
 
@@ -1527,7 +1513,7 @@ If starting from existing world, also provide:
 
 Output: a Dict containing data after the expansion:
 - **stats** - statistics array containing world and range expansion information
-- **fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
+- **fitn**, **pops**, **delsel**, **bensel**, **delneu**, **benneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
 function rangeexp_inf(
     n_gens_burnin = DEF_N_GENS_BURNIN,
@@ -1662,7 +1648,7 @@ Shows an animated heatmap of `data` from `gen_start` to `gen_end`.
 
 ---
 
-`data`: 3-dimensional array of 2d by-deme data + time 
+`data`: 3-dimensional array of 2d by-deme data + time
 
 `gen_start`: start generation
 
