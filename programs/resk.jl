@@ -73,6 +73,27 @@ default(margin = 6Plots.mm) # Add sufficient margins to prevent cutoff
 # ------------------------------------------------
 
 """
+Chooses all indices of a multidimensional array expect at `fixed_dim`, where only `fixed_index` is chosen. I.e. array[:,:,`fixed_index`]
+
+---
+
+`array`: array to choose from
+
+`fixed_dim`: the only fixed dimension
+
+`fixed_index`: fixed index for `fixed_dim`
+
+---
+
+Output: integer range of coordinates around the world centre
+"""
+function multi_index(array, fixed_dim, fixed_index)
+    dims = ndims(array)  # Number of dimensions of the array
+    indices = ntuple(i -> (i == fixed_dim ? fixed_index : :), dims)
+    return array[indices...]
+end
+
+"""
 Returns a range of coordinates of world centre (determined from `r_max_exp`) ± side length of the inscribed square of a circle with radius `r_max_burnin`.
 
 Used in determining the starting fillup of demes in radial expansions.
@@ -545,11 +566,6 @@ Output 10: a spatial array of demes with average neutral aa mutation count in th
     all_birth_count = 0
 
     # Fill the next generation habitat
-    fitn_out = false
-    pops_out = false
-    sel_out = false
-    neu_out = false
-
     if fitn_out
         mean_fitn_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
         fill!(mean_fitn_next, NaN)
@@ -1029,13 +1045,29 @@ end
 # ------------------------------------------------
 
 """
-Randomly mutates at selected loci. Used when building the next generation in finite-sites expansions.
+Randomly mutates at selected regions and calculates the number of mutations in an individual. Used when building the next generation in infinite-sites expansions.
 
 ---
 
-`person`: an individual's loci (fitness) array
+`person`: an individual's segr. regions (fitness) array
 
 `mut_rate`: genome-wide mutation rate
+
+`n_segr_regions`: number of segregating regions
+
+`s_sel_coef`: selection coefficient
+
+`prop_of_sel_loci`: proportion of selected loci within segr. regions
+
+---
+
+Output 1: number of deleterious selected mutations
+
+Output 2: number of beneficial selected mutations
+
+Output 3: number of deleterious neutral mutations
+
+Output 4: number of beneficial neutral mutations
 
 """
 @inbounds function mutate_inf(
@@ -1074,6 +1106,15 @@ Randomly mutates at selected loci. Used when building the next generation in fin
     return muts_delsel, muts_bensel, muts_delneu, muts_benneu
 end
 
+"""
+Recombines loci with a 1/2 chance. Used when building the next generation in infinite-sites expansions.
+
+---
+
+`person`: an individual's segr. regions (fitness) array
+
+`n_segr_regions`: number of segregating regions
+"""
 @inbounds function crossover_inf(person, n_segr_regions)
     for i = 1:n_segr_regions
         lr = rand(1:2)
@@ -1081,21 +1122,96 @@ end
     end
 end
 
-@inbounds function mate_inf(person1, person2, n_segr_regions)
+"""
+Creates a zygote from two individuals. Used when building the next generation in infinite-sites expansions.
+
+---
+
+`ind1`: individual 1's segr. regions (fitness) array
+
+`ind2`: individual 2's segr. regions (fitness) array
+
+`mut_rate`: genome-wide mutation rate
+
+`n_segr_regions`: number of segregating regions
+
+---
+
+Output: segr. regions (fitness) array of a zygote
+"""
+@inbounds function mate_inf(ind1, ind2, n_segr_regions)
     lr1 = rand(1:2) == 1 ? (1:n_segr_regions) : ((n_segr_regions+1):(n_segr_regions*2))
     lr2 = rand(1:2) == 1 ? (1:n_segr_regions) : ((n_segr_regions+1):(n_segr_regions*2))
-    return vcat(person1[lr1], person2[lr2])
+    return vcat(ind1[lr1], ind2[lr2])
 end
 
+"""
+Builds the next generation in infinite-sites expansions, i.e. advances the world array (segr. regions' fitness array) by one generation and returns the new generation data for fitness, populations, mutation numbers.
+
+---
+
+`pnt_wld`: a spatial array of demes that contain individuals' segr. regions (fitness) [Float] arrays
+
+`pnt_wld_stats`: world stats Dict
+
+`fitn_out`: if **true**, the new generation data for fitness will be output
+
+`pops_out`: if **true**, the new generation data for populations will be output
+
+`sel_out`: if **true**, the new generation data for selected mutations will be output
+
+`neu_out`: if **true**, the new generation data for neutral mutations will be output
+
+`max_migr`: a tuple of maximum migration area coordinates
+
+`migr_mode`: mode of migration. Possible values:
+- **ort** - orthogonal directions only
+- **all** - orthogonal and diagonal
+- **hex** - hexagonal grid
+- **diag1/2** - orthogonal and half-weighted diagonal
+- **buffon1** - equidistant Buffon-Laplace (see documentation)
+- **buffon2** - uniform Buffon-Laplace
+- **buffon3** - inv.proportional Buffon-Laplace
+
+`bottleneck`: if not **NaN**, a tuple of bottleneck coordinates
+
+`refl_walls`: if **true**, walls reflect migrants
+
+`r_max_migr`: Int maximum migration radius. If *>0**, migration is kept within this radius. Can be used in addition to `max_migr`
+
+`r_coords`: a tuple (array) of axes' ordinal numbers that the n-sphere with `r_max_migr` covers. For example:
+- **(1,3)** - migration is bound within a disk at x and z axes
+- **(1,2,3)** - migration is bound within a sphere at x, y and z axes
+
+---
+
+Output 1: a changed `pnt_wld_ms1` = a spatial array of demes that contain individuals' left monosome [Bool] arrays
+
+Output 2: a changed `pnt_wld_ms2` = a spatial array of demes that contain individuals' right monosome [Bool] arrays
+
+Output 3: a spatial array of demes with average fitness in the new generation
+
+Output 4: a spatial array of demes with populations in the new generation
+
+Output 5: a spatial array of demes with average selected AA mutation count in the new generation
+
+Output 6: a spatial array of demes with average selected Aa mutation count in the new generation
+
+Output 7: a spatial array of demes with average selected aa mutation count in the new generation
+
+Output 8: a spatial array of demes with average neutral AA mutation count in the new generation
+
+Output 9: a spatial array of demes with average neutral Aa mutation count in the new generation
+
+Output 10: a spatial array of demes with average neutral aa mutation count in the new generation
+"""
 @inbounds function build_next_gen_inf(
     pnt_wld::Array{Array{Array{Float32}}},
     pnt_wld_stats,
-    pnt_fitn_wld = NaN,
-    pnt_pops_wld = NaN,
-    pnt_muts_delsel_wld = NaN,
-    pnt_muts_bensel_wld = NaN,
-    pnt_muts_delneu_wld = NaN,
-    pnt_muts_benneu_wld = NaN;
+    fitn_out = false,
+    pops_out = false,
+    sel_out = false,
+    neu_out = false;
     max_migr = NaN,
     migr_mode = DEF_MIGR_MODE,
     bottleneck = NaN,
@@ -1120,32 +1236,21 @@ end
     all_birth_count = 0
 
     # Fill the next generation habitat
-    fitn_out = false
-    pops_out = false
-    sel_out = false
-    neu_out = false
-
-    if pnt_fitn_wld isa Array{Float32,wlddim + 1}
-        fitn_out = true
+    if fitn_out
         mean_fitn_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
         fill!(mean_fitn_next, NaN)
     end
-    if pnt_pops_wld isa Array{Float32,wlddim + 1}
-        pops_out = true
+    if pops_out
         pops_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
         fill!(pops_next, NaN)
     end
-    if (pnt_muts_delsel_wld isa Array{Float32,wlddim + 1}) &&
-       (pnt_muts_bensel_wld isa Array{Float32,wlddim + 1})
-        sel_out = true
+    if sel_out
         muts_delsel_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
         muts_bensel_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
         fill!(muts_delsel_next, NaN)
         fill!(muts_bensel_next, NaN)
     end
-    if (pnt_muts_delneu_wld isa Array{Float32,wlddim + 1}) &&
-       (pnt_muts_benneu_wld isa Array{Float32,wlddim + 1})
-        neu_out = true
+    if neu_out
         muts_delneu_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
         muts_benneu_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
         fill!(muts_delneu_next, NaN)
@@ -1243,7 +1348,49 @@ end
 end
 
 """
-Create an empty world with infinite-sites individual structure.
+Creates an empty world (deme space) with infinite-sites individual structure. 2-dimensional by default.
+
+---
+
+`max`: a tuple of space bounds (maximal coordinates)
+
+`min`: a tuple of space bounds (minimal coordinates). Limited to (1,1) for now
+
+`name`: world name
+
+`k_capacity`: capacity of each deme
+
+`r_prolif_rate`: proliferation rate
+
+`n_loci`: number of loci
+
+`n_sel_loci`: number of selected loci
+
+`mut_rate`: genome-wide mutation rate
+
+`migr_mode`: mode of migration. Possible values:
+- **ort** - orthogonal directions only
+- **all** - orthogonal and diagonal
+- **hex** - hexagonal grid
+- **diag1/2** - orthogonal and half-weighted diagonal
+- **buffon1** - equidistant Buffon-Laplace (see documentation)
+- **buffon2** - uniform Buffon-Laplace
+- **buffon3** - inv.proportional Buffon-Laplace
+
+`s_sel_coef`: selection coefficient
+
+`h_domin_coef`: dominance coefficient (in heterozygous loci, new_fitness *= **1 -** `h_domin_coef` * `s_sel_coef`)
+
+`prop_of_del_muts`: proportion of deleterious mutations in nature
+
+---
+
+Output 1: a spatial array of demes that contain individuals' left monosome [Bool] arrays (all empty)
+
+Output 2: a spatial array of demes that contain individuals' right monosome [Bool] arrays (all empty)
+
+Output 3: world stats Dict
+
 """
 function create_empty_world_inf(
     max = (DEF_X_MAX, DEF_Y_MAX);
@@ -1283,6 +1430,22 @@ function create_empty_world_inf(
     return wld, wld_stats
 end
 
+"""
+Fills random demes within given monosome arrays with infinite-sites individuals. Usually used after an empty world is created.
+
+---
+
+`pnt_wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays
+
+`pnt_wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays
+
+`pnt_wld_stats`: world stats Dict
+
+`fill`: an array of Int ranges of the coordinates that define the area within which to fill
+
+`n_demes_to_fill`: number of demes to fill
+
+"""
 function fill_random_demes_inf(
     pnt_wld::Array{Array{Array{Float32}}},
     pnt_wld_stats,
@@ -1306,6 +1469,66 @@ function fill_random_demes_inf(
     pnt_wld_stats["n_demes_startfill"] = n_demes_to_fill
 end
 
+"""
+
+The general function for simulating a range expansion with infinite-sites individuals.
+If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTFILL` demes filled with individuals.
+
+---
+
+`n_gens_burnin`: duration of the burn-in phase, used to reach mutation-selection equilibrium
+
+`n_gens_exp`: duration of the expansion
+
+`max_burnin`: a tuple of maximum coordinates during burn-in
+
+`max_exp`: a tuple of maximum coordinates during expansion
+
+`max`: a tuple of maximum coordinates of space
+
+`migr_mode`: mode of migration. Possible values:
+- **ort** - orthogonal directions only
+- **all** - orthogonal and diagonal
+- **hex** - hexagonal grid
+- **diag1/2** - orthogonal and half-weighted diagonal
+- **buffon1** - equidistant Buffon-Laplace (see documentation)
+- **buffon2** - uniform Buffon-Laplace
+- **buffon3** - inv.proportional Buffon-Laplace
+
+`data_to_generate`: string of letters representing different data to output. Possible values:
+- **F** - deme-average fitness (**fitn**)
+- **P** - deme populations (**pops**)
+- **S** - deme-average number of homo- and heterozygous selected loci (**AAsel**, **Aasel** and **aasel**)
+- **M** - deme-average number of homo- and heterozygous neutral loci (**AAneu**, **Aaneu** and **aaneu**)
+
+If starting from existing world, also provide:
+
+`wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays
+
+`wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays
+
+`wld_stats`: world stats Dict
+
+`name`: world name
+
+`bottleneck`: if not **NaN**, a tuple of bottleneck coordinates
+
+`r_max_burnin`: radius that bounds the burn-in area
+
+`r_max_exp`: radius that bounds the expansion area
+
+`r_coords`: a tuple (array) of axes' ordinal numbers that the n-sphere with `r_max_migr` covers. For example:
+- **(1,3)** - migration is bound within a disk at x and z axes
+- **(1,2,3)** - migration is bound within a sphere at x, y and z axes
+
+`startfill_range`: an array of Int ranges of the coordinates that define the area to fill with individuals at start
+
+---
+
+Output: a Dict containing data after the expansion:
+- **stats** - statistics array containing world and range expansion information
+- **fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
+"""
 function rangeexp_inf(
     n_gens_burnin = DEF_N_GENS_BURNIN,
     n_gens_exp = DEF_N_GENS_EXP;
@@ -1342,17 +1565,25 @@ function rangeexp_inf(
         fill_random_demes_inf(wld, wld_stats, startfill_range)
     end
 
+    fitn_out = false
+    pops_out = false
+    sel_out = false
+    neu_out = false
     if occursin("F", data_to_generate)
+        fitn_out = true
         fitn_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
     end
     if occursin("P", data_to_generate)
+        pops_out = true
         pops_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
     end
     if occursin("S", data_to_generate)
+        sel_out = true
         muts_delsel_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
         muts_bensel_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
     end
     if occursin("N", data_to_generate)
+        neu_out = true
         muts_delneu_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
         muts_benneu_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
     end
@@ -1378,12 +1609,10 @@ function rangeexp_inf(
         muts_benneu_next = build_next_gen_inf(
             wld,
             wld_stats,
-            fitn_wld,
-            pops_wld,
-            muts_delsel_wld,
-            muts_bensel_wld,
-            muts_delneu_wld,
-            muts_benneu_wld;
+            fitn_out,
+            pops_out,
+            sel_out,
+            neu_out;
             max_migr = max_migr,
             migr_mode = migr_mode,
             bottleneck = bottleneck,
@@ -1428,12 +1657,6 @@ end
 # Plotting functions
 # ------------------------------------------------
 
-function multi_index(array, fixed_index, fixed_dim)
-    dims = ndims(array)  # Number of dimensions of the array
-    indices = ntuple(i -> (i == fixed_dim ? fixed_index : :), dims)
-    return array[indices...]
-end
-
 """
 Shows an animated heatmap of `data` from `gen_start` to `gen_end`.
 
@@ -1450,8 +1673,6 @@ Shows an animated heatmap of `data` from `gen_start` to `gen_end`.
 `clim`: color bounds (Plots.jl's clim parameter)
 
 `log_base`: if not **-1**, color shows log values with this as base
-
----
 
 """
 function re_heatmap(
@@ -1542,8 +1763,6 @@ Shows population data of `re` from `gen_start` to `gen_end`.
 `clim`: color bounds (Plots.jl's clim parameter)
 
 `log_base`: if not **-1**, color shows log values with this as base
-
----
 
 """
 function re_heatmap_pops(
