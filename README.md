@@ -51,16 +51,16 @@ will output the average number of selected homozygous mutant loci for in a deme:
 
 Here's an example of a longer axial simulation in 2D:
 ```
-test = rangeexp_axial_inf(100,1000;data_to_generate="FPSN",prop_of_sel_loci=0.8,y_max=8,migr_mode="diag1/2")
+test = rangeexp_strip_inf(100,1000;data_to_generate="FPSN",prop_of_sel_loci=0.8,y_max=8,migr_mode="diag1/2")
 ```
 ![alt text](https://github.com/HartreeY/RESK/blob/main/animations/readme1.gif?raw=true)
 
-# To-do
+## Other examples
 
-- Add hexagonal worlds
-- Add more bottleneck options
-- Add the possibility for continuing (or stacking) range expansions
-- Add startfill regions of shapes other than rectangle
-- Add multiple-deme jumps in migration
-- Add an example for a two-sided 1D simulation
-- Add `rangeexp_rect` (rectangle) and `rangeexp_ppip` (parallelepiped)
+`rangeexp_cylinder_inf`:
+
+![alt text](https://github.com/HartreeY/RESK/blob/main/animations/readme2.gif?raw=true)
+
+`rangeexp_sphere_inf`:
+
+![alt text](https://github.com/HartreeY/RESK/blob/main/animations/readme3.gif?raw=true)
