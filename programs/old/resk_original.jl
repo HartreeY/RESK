@@ -1,5 +1,4 @@
-using StatsBase,
-    Distributions, Random, Plots, SpecialFunctions, Serialization, Dates, GLMakie
+using StatsBase, Distributions, Random, Plots, SpecialFunctions, Serialization, Dates, GLMakie
 include("consts.jl")
 
 # Configuration
@@ -7,67 +6,30 @@ include("consts.jl")
 
 # Migration probabilities for each dimensionality -> for each mode
 MIGR_PROBS = [
-    Dict(["ort" => (1, 0)]), # 1D
-    Dict([
-        "ort" => (1, 0),
-        "all" => (1 / 2, 1 / 2),
-        "buffon1" => (2 / pi, 1 / pi),
-        "buffon2" => (4 / 3 / pi, 1 / 3 / pi),
-        "buffon3" => (0.4244132, 0.21221),
-        "diag1/2" => (2 / 3, 1 / 3),
-    ]), # 2D. To add "hex"!
-    Dict([
-        "ort" => (1, 0),
-        "all" => (1 / 2, 1 / 2),
-        "buffon1" => (2 / pi, 1 / pi),
-        "buffon2" => (4 / 3 / pi, 1 / 3 / pi),
-        "buffon3" => (0.4244132, 0.21221),
-        "diag1/2" => (2 / 3, 1 / 3),
-    ]), # 3D. To add "hex"! To confirm Buffon for 3d!
+    Dict(["ort"=>(1,0)]), # 1D
+    Dict(["ort"=>(1,0),"all"=>(1/2,1/2),"buffon1"=>(2/pi,1/pi),"buffon2"=>(4/3/pi,1/3/pi),"buffon3"=>(0.4244132,0.21221),"diag1/2"=>(2/3,1/3)]), # 2D. To add "hex"!
+    Dict(["ort"=>(1,0),"all"=>(1/2,1/2),"buffon1"=>(2/pi,1/pi),"buffon2"=>(4/3/pi,1/3/pi),"buffon3"=>(0.4244132,0.21221),"diag1/2"=>(2/3,1/3)]) # 3D. To add "hex"! To confirm Buffon for 3d!
 ]
 
 # Migration directions for each mode -> for each dimensionality
 MIGR_DIRS_ORT = [
-    [[1], [-1]], # 1D
-    [[-1, 0], [0, -1], [0, 1], [1, 0]], # 2D
-    [[-1, 0, 0], [1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, -1], [0, 0, 1]], # 3D
+    [[1],[-1]], # 1D
+    [[-1,0],[0,-1],[0,1],[1,0]], # 2D
+    [[-1,0,0],[1,0,0],[0,1,0],[0,-1,0],[0,0,-1],[0,0,1]] # 3D
 ]
 MIGR_DIRS_DIAG = [
     [], # 1D
-    [[-1, -1], [-1, 1], [1, -1], [1, 1]], # 2D
-    [
-        [-1, -1, -1],
-        [-1, -1, 0],
-        [-1, -1, 1],
-        [-1, 0, -1],
-        [-1, 0, 1],
-        [-1, 1, -1],
-        [-1, 1, 0],
-        [-1, 1, 1],
-        [0, -1, -1],
-        [0, -1, 0],
-        [0, -1, 1],
-        [0, 0, 0],
-        [0, 1, -1],
-        [0, 1, 1],
-        [1, -1, -1],
-        [1, -1, 0],
-        [1, -1, 1],
-        [1, 0, -1],
-        [1, 0, 1],
-        [1, 1, -1],
-        [1, 1, 0],
-        [1, 1, 1],
-    ], # 3D
+    [[-1,-1],[-1,1],[1,-1],[1,1]], # 2D
+    [[-1,-1,-1],[-1,-1,0],[-1,-1,1],[-1,0,-1],[-1,0,1],[-1,1,-1],[-1,1,0],[-1,1,1],[0,-1,-1],[0,-1,0],[0,-1,1],[0,0,0],[0,1,-1],[0,1,1],[1,-1,-1],[1,-1,0],[1,-1,1],[1,0,-1],[1,0,1],[1,1,-1],[1,1,0],[1,1,1]] # 3D
 ]
 MIGR_DIRS_HEX = [
-    1 => [], # 1D
-    2 => [[-1, 0], [0, -1], [-1, 1], [0, 1], [1, 0], [1, 1]], # 2D
-    3 => [], # 3D
+    1=> [], # 1D
+    2=> [[-1,0],[0,-1],[-1,1],[0,1],[1,0],[1,1]], # 2D
+    3=> [] # 3D
 ] # To do!
 
 # Plot configuration
-default(margin = 6Plots.mm) # Add sufficient margins to prevent cutoff
+default(margin=6Plots.mm) # Add sufficient margins to prevent cutoff
 
 # Common functions
 # ------------------------------------------------
@@ -87,7 +49,7 @@ Chooses all indices of a multidimensional array expect at `fixed_dim`, where onl
 
 Output: integer range of coordinates around the world centre
 """
-function multi_index(array, fixed_dim, fixed_index)
+function multi_index(array,fixed_dim, fixed_index)
     dims = ndims(array)  # Number of dimensions of the array
     indices = ntuple(i -> (i == fixed_dim ? fixed_index : :), dims)
     return array[indices...]
@@ -108,12 +70,9 @@ Used in determining the starting fillup of demes in radial expansions.
 
 Output: integer range of coordinates around the world centre
 """
-function ins_sq(r_max_burnin, r_max_exp)
-    m = r_max_exp * 2 + 1
-    return (trunc(Int, 1 + round((m - 1) / 2) - r_max_burnin * 0.666)):(trunc(
-        Int,
-        1 + round((m - 1) / 2) + r_max_burnin * 0.666,
-    ))
+function ins_sq(r_max_burnin,r_max_exp)
+    m = r_max_exp*2+1
+    return (trunc(Int,1+round((m-1)/2)-r_max_burnin*0.666)):(trunc(Int,1+round((m-1)/2)+r_max_burnin*0.666))
 end
 
 """
@@ -131,12 +90,9 @@ Used in determining the starting fillup of demes in spherical expansions.
 
 Output: integer range of coordinates around the world centre
 """
-function ins_cb(r_max_burnin, r_max_exp)
-    m = r_max_exp * 2 + 1
-    return (trunc(Int, 1 + round((m - 1) / 2) - r_max_burnin * 0.577)):(trunc(
-        Int,
-        1 + round((m - 1) / 2) + r_max_burnin * 0.577,
-    ))
+function ins_cb(r_max_burnin,r_max_exp)
+    m = r_max_exp*2+1
+    return (trunc(Int,1+round((m-1)/2)-r_max_burnin*0.577)):(trunc(Int,1+round((m-1)/2)+r_max_burnin*0.577))
 end
 
 
@@ -155,23 +111,16 @@ Output 1: array of deme coordinates to be filled in the next generation
 
 Output 2: array of populations for the coordinates in Output 1
 """
-@inbounds function calc_offspring(pnt_wld, pnt_wld_stats)
+@inbounds function calc_offspring(pnt_wld,pnt_wld_stats)
     next_gen_posits = []
-    next_gen_pops = fill(NaN, pnt_wld_stats["max"]...)
+    next_gen_pops = fill(NaN,pnt_wld_stats["max"]...)
     for k in Iterators.product([1:n for n in pnt_wld_stats["max"]]...)
-        if isassigned(pnt_wld, k...) && length(pnt_wld[k...]) > 0
+        if isassigned(pnt_wld,k...) && length(pnt_wld[k...])>0
             n_ppl_at_deme = length(pnt_wld[k...])
-            expected_offspring =
-                n_ppl_at_deme * (
-                    pnt_wld_stats["r_prolif_rate"] / (
-                        1 +
-                        (n_ppl_at_deme * (pnt_wld_stats["r_prolif_rate"] - 1)) /
-                        pnt_wld_stats["k_capacity"]
-                    )
-                )
-            next_gen_pops[k...] = rand(Poisson(expected_offspring))
-            if next_gen_pops[k...] > 0
-                push!(next_gen_posits, [k...])
+            expected_offspring = n_ppl_at_deme * (pnt_wld_stats["r_prolif_rate"]/(1 + (n_ppl_at_deme*(pnt_wld_stats["r_prolif_rate"]-1))/pnt_wld_stats["k_capacity"]))
+            next_gen_pops[k...] =  rand(Poisson(expected_offspring))
+            if next_gen_pops[k...]>0
+                push!(next_gen_posits,[k...])
             end
         end
     end
@@ -212,25 +161,16 @@ Calculates an individual's migration distance. Used when building the next gener
 
 Output: array of the amount of demes moved per each coordinate
 """
-@inbounds function calc_migr_dist(
-    deme,
-    pnt_wld_stats,
-    migr_mode,
-    bottleneck,
-    max_migr = pnt_wld_stats["max"],
-    refl_walls = false,
-    r_max_migr = 0,
-    r_coords = [1, 2],
-)
+@inbounds function calc_migr_dist(deme,pnt_wld_stats,migr_mode,bottleneck,max_migr=pnt_wld_stats["max"],refl_walls=false,r_max_migr=0,r_coords=[1,2])
 
     wlddim = pnt_wld_stats["wlddim"]
     max = pnt_wld_stats["max"]
-    move = zeros(Int32, wlddim)
+    move = zeros(Int32,wlddim)
     migr_res = rand()
     if !(migr_mode in keys(MIGR_PROBS[wlddim]))
         migr_mode = "ort"
     end
-    p_lat, p_diag = MIGR_PROBS[wlddim][migr_mode]
+    p_lat,p_diag = MIGR_PROBS[wlddim][migr_mode]
 
     if rand() < pnt_wld_stats["migr_rate"] && migr_res < p_lat + p_diag
         if migr_res < p_lat
@@ -244,20 +184,20 @@ Output: array of the amount of demes moved per each coordinate
 
         # Nullify migration on certain conditions
         # Inside certain radius check:
-        if r_max_migr > 0
-            r_arr = [deme[i] - (max[i] - 1) / 2 + move[i] - 1 for i in r_coords]
-            r2 = sum(r_arr .^ 2)
-            if r2 > r_max_migr * r_max_migr
+        if r_max_migr>0
+            r_arr = [deme[i]-(max[i]-1)/2+move[i]-1 for i in r_coords]
+            r2 = sum(r_arr.^2)
+            if r2 > r_max_migr*r_max_migr
                 #factor = r_max_migr*r_max_migr/r2
                 move[r_coords] .= 0 # Do [trunc(Int16, factor * move[i]) for i in 1:wlddim] in the future (with multiple-deme jumps)
             end
         end
 
         # Inside certain square check:
-        if isa(max_migr, Tuple)
-            for i = 1:wlddim
+        if isa(max_migr,Tuple)
+            for i in 1:wlddim
                 if !isnan(max_migr[i])
-                    try_move = deme[i] + move[i]
+                    try_move = deme[i]+move[i]
                     if try_move > max_migr[i] || try_move < 1
                         move[i] = refl_walls ? -move[i] : 0
                     end
@@ -266,30 +206,22 @@ Output: array of the amount of demes moved per each coordinate
         end
 
         # Bottleneck barrier check:
-        if isa(bottleneck, Tuple) && isa(bottleneck[2], Int) && bottleneck[2] > 0
-            if bottleneck[1] == "midhole at x="
-                common_cond =
-                    deme[1] + move[1] == bottleneck[2] &&
-                    deme[2] + move[2] != ceil(max[2] / 2)
-                if wlddim == 2 && common_cond
+        if isa(bottleneck,Tuple) && isa(bottleneck[2],Int) && bottleneck[2]>0
+            if bottleneck[1]=="midhole at x="
+                common_cond = deme[1]+move[1]==bottleneck[2] && deme[2]+move[2]!=ceil(max[2]/2)
+                if wlddim==2 && common_cond
                     move .= 0
-                elseif wlddim == 3 && common_cond && deme[3] + move[3] != ceil(max[3] / 2)
+                elseif wlddim==3 && common_cond && deme[3]+move[3]!=ceil(max[3]/2)
                     move .= 0
                 end
-            elseif bottleneck[1] == "midhole at y="
-                common_cond =
-                    deme[2] + move[2] == bottleneck[2] &&
-                    deme[1] + move[1] != ceil(max[1] / 2)
-                if wlddim == 2 && common_cond
+            elseif bottleneck[1]=="midhole at y="
+                common_cond = deme[2]+move[2]==bottleneck[2] && deme[1]+move[1]!=ceil(max[1]/2)
+                if wlddim==2 && common_cond
                     move .= 0
-                elseif wlddim == 3 && common_cond && deme[3] + move[3] != ceil(max[3] / 2)
+                elseif wlddim==3 && common_cond && deme[3]+move[3]!=ceil(max[3]/2)
                     move .= 0
                 end
-            elseif bottleneck[1] == "midhole at z=" &&
-                   wlddim == 3 &&
-                   deme[3] + move[3] == bottleneck[2] &&
-                   deme[1] + move[1] != ceil(max[1] / 2) &&
-                   deme[2] + move[2] != ceil(max[2] / 2)
+            elseif bottleneck[1]=="midhole at z=" && wlddim==3 && deme[3]+move[3]==bottleneck[2] && deme[1]+move[1]!=ceil(max[1]/2) && deme[2]+move[2]!=ceil(max[2]/2)
                 move .= 0
             end
         end
@@ -334,14 +266,7 @@ Output 6: average number of neutral aa mutations in this deme
 
 Output 7: average fitness in this deme
 """
-function calc_muts_and_fitn_in_deme(
-    deme_ms1,
-    deme_ms2,
-    s_sel_coef,
-    h_domin_coef,
-    n_loci,
-    sel_loci = [],
-)
+function calc_muts_and_fitn_in_deme(deme_ms1,deme_ms2,s_sel_coef,h_domin_coef,n_loci,sel_loci=[])
     len = length(deme_ms1)
     muts_AAsel_total = 0
     muts_Aasel_total = 0
@@ -350,16 +275,16 @@ function calc_muts_and_fitn_in_deme(
     muts_Aaneu_total = 0
     muts_aaneu_total = 0
     fits = []
-
-    for i = 1:len
+    
+    for i in 1:len
         muts_AA_sel = 0
         muts_Aa_sel = 0
         muts_AA_neu = 0
         muts_Aa_neu = 0
         new_fitness = 1.0
 
-        for j = 1:n_loci
-            if deme_ms1[i][j] == true && deme_ms2[i][j] == true
+        for j in 1:n_loci
+            if deme_ms1[i][j]==true && deme_ms2[i][j]==true
                 if j in sel_loci
                     muts_AA_sel += 1
                     new_fitness *= 1 - s_sel_coef
@@ -367,7 +292,7 @@ function calc_muts_and_fitn_in_deme(
                     muts_AA_neu += 1
                 end
 
-            elseif deme_ms1[i][j] == true || deme_ms2[i][j] == true
+            elseif deme_ms1[i][j]==true || deme_ms2[i][j]==true
                 if j in sel_loci
                     muts_Aa_sel += 1
                     new_fitness *= 1 - h_domin_coef * s_sel_coef
@@ -377,7 +302,7 @@ function calc_muts_and_fitn_in_deme(
             end
         end
 
-        push!(fits, new_fitness)
+        push!(fits,new_fitness)
         muts_AAsel_total += muts_AA_sel
         muts_Aasel_total += muts_Aa_sel
         muts_AAneu_total += muts_AA_neu
@@ -392,13 +317,7 @@ function calc_muts_and_fitn_in_deme(
     muts_AAneu_total /= len
     muts_Aaneu_total /= len
     muts_aaneu_total /= len
-    return muts_AAsel_total,
-    muts_Aasel_total,
-    muts_aasel_total,
-    muts_AAneu_total,
-    muts_Aaneu_total,
-    muts_aaneu_total,
-    fits
+    return muts_AAsel_total,muts_Aasel_total,muts_aasel_total,muts_AAneu_total,muts_Aaneu_total,muts_aaneu_total,fits
 end
 
 """
@@ -414,12 +333,12 @@ Randomly mutates at selected loci. Used when building the next generation in fin
 
 `n_loci`: number of loci
 """
-@inbounds function mutate(ms1, ms2, mut_rate, n_loci)
+@inbounds function mutate(ms1,ms2,mut_rate,n_loci)
     get_mutation_random = rand(Poisson(mut_rate))
-    @fastmath @inbounds for _ = 1:get_mutation_random
+    @fastmath @inbounds for _ in 1:get_mutation_random
         pos_alter = sample(1:n_loci)
 
-        if rand(1:2) == 1
+        if rand(1:2)==1
             ms1[pos_alter] = true
         else
             ms2[pos_alter] = true
@@ -440,10 +359,10 @@ Recombines loci with a 1/2 chance. Used when building the next generation in fin
 
 `n_loci`: number of loci
 """
-@inbounds function crossover(ms1, ms2, n_loci)
-    for j = 1:n_loci
+@inbounds function crossover(ms1,ms2,n_loci)
+    for j in 1:n_loci
         lr = rand(1:2)
-        ms1[j] = lr == 1 ? ms1[j] : ms2[j]
+        ms1[j] = lr==1 ? ms1[j] : ms2[j]
     end
 end
 
@@ -464,8 +383,8 @@ Creates a zygote from two individuals. Used when building the next generation in
 
 Output: left OR right monosome array of a zygote
 """
-@inbounds function mate(ind1, ind2, n_loci)
-    new_loci = vcat(ind1[1:n_loci], ind2[1:n_loci])
+@inbounds function mate(ind1,ind2,n_loci)
+    new_loci = vcat(ind1[1:n_loci],ind2[1:n_loci])
     return new_loci
 end
 
@@ -531,30 +450,17 @@ Output 9: a spatial array of demes with average neutral Aa mutation count in the
 
 Output 10: a spatial array of demes with average neutral aa mutation count in the new generation
 """
-@inbounds function build_next_gen(
-    pnt_wld_ms1,
-    pnt_wld_ms2,
-    pnt_wld_stats,
-    fitn_out = false,
-    pops_out = false,
-    sel_out = false,
-    neu_out = false;
-    max_migr = NaN,
-    migr_mode = DEF_MIGR_MODE,
-    bottleneck = NaN,
-    refl_walls = false,
-    r_max_migr = 0,
-    r_coords = [1, 2],
-)
+@inbounds function build_next_gen(pnt_wld_ms1,pnt_wld_ms2,pnt_wld_stats,fitn_out=false,pops_out=false,sel_out=false,neu_out=false;
+    max_migr=NaN,migr_mode=DEF_MIGR_MODE,bottleneck=NaN,refl_walls=false,r_max_migr=0,r_coords=[1,2])
 
     wlddim = pnt_wld_stats["wlddim"]
 
     # Determine the number of offspring for each deme
-    next_gen_posits, next_gen_pops = calc_offspring(pnt_wld_ms1, pnt_wld_stats)
-
+    next_gen_posits, next_gen_pops = calc_offspring(pnt_wld_ms1,pnt_wld_stats)
+    
     # Define the world (as an array [=demes] of arrays [=individs] of two Bool arrays [=monosomes]) and the data arrays in the next generation
-    wld_ms1_next = Array{Array{Array{Bool}},wlddim}(undef, pnt_wld_stats["max"]...)
-    wld_ms2_next = Array{Array{Array{Bool}},wlddim}(undef, pnt_wld_stats["max"]...)
+    wld_ms1_next = Array{Array{Array{Bool}}, wlddim}(undef,pnt_wld_stats["max"]...)
+    wld_ms2_next = Array{Array{Array{Bool}}, wlddim}(undef,pnt_wld_stats["max"]...)
     mean_fitn_next = NaN
     pops_next = NaN
     muts_AAsel_next = NaN
@@ -567,49 +473,37 @@ Output 10: a spatial array of demes with average neutral aa mutation count in th
 
     # Fill the next generation habitat
     if fitn_out
-        mean_fitn_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        fill!(mean_fitn_next, NaN)
+        mean_fitn_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        fill!(mean_fitn_next,NaN)
     end
     if pops_out
-        pops_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        fill!(pops_next, NaN)
+        pops_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        fill!(pops_next,NaN)
     end
     if sel_out
-        muts_AAsel_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        muts_Aasel_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        muts_aasel_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        fill!(muts_AAsel_next, NaN)
-        fill!(muts_Aasel_next, NaN)
-        fill!(muts_aasel_next, NaN)
+        muts_AAsel_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        muts_Aasel_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        muts_aasel_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        fill!(muts_AAsel_next,NaN)
+        fill!(muts_Aasel_next,NaN)
+        fill!(muts_aasel_next,NaN)
     end
     if neu_out
-        muts_AAneu_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        muts_Aaneu_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        muts_aaneu_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        fill!(muts_AAneu_next, NaN)
-        fill!(muts_Aaneu_next, NaN)
-        fill!(muts_aaneu_next, NaN)
+        muts_AAneu_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        muts_Aaneu_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        muts_aaneu_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        fill!(muts_AAneu_next,NaN)
+        fill!(muts_Aaneu_next,NaN)
+        fill!(muts_aaneu_next,NaN)
     end
-
+    
     for deme in next_gen_posits
         ms1_at_pos = pnt_wld_ms1[deme...]
         ms2_at_pos = pnt_wld_ms2[deme...]
 
         fitns = []
-        cnt_res_AAsel,
-        cnt_res_Aasel,
-        cnt_res_aasel,
-        cnt_res_AAneu,
-        cnt_res_Aaneu,
-        cnt_res_aaneu,
-        fitns = calc_muts_and_fitn_in_deme(
-            ms1_at_pos,
-            ms2_at_pos,
-            pnt_wld_stats["s_sel_coef"],
-            pnt_wld_stats["h_domin_coef"],
-            pnt_wld_stats["n_loci"],
-            pnt_wld_stats["sel_loci"],
-        )
+        cnt_res_AAsel,cnt_res_Aasel,cnt_res_aasel,cnt_res_AAneu,cnt_res_Aaneu,cnt_res_aaneu,fitns =
+            calc_muts_and_fitn_in_deme(ms1_at_pos,ms2_at_pos,pnt_wld_stats["s_sel_coef"],pnt_wld_stats["h_domin_coef"],pnt_wld_stats["n_loci"],pnt_wld_stats["sel_loci"])
 
         if fitn_out
             mean_fitn_next[deme...] = mean(fitns)
@@ -626,76 +520,48 @@ Output 10: a spatial array of demes with average neutral aa mutation count in th
         end
 
         next_generation_size = next_gen_pops[deme...]
-
+        
         if next_generation_size > 0
             birth_count = 0
-            for _ = 1:next_generation_size
-
-                mom_ms1 = wsample(ms1_at_pos, Float32.(fitns))
-                mom_ms2 = wsample(ms2_at_pos, Float32.(fitns))
-                dad_ms1 = wsample(ms1_at_pos, Float32.(fitns))
-                dad_ms2 = wsample(ms2_at_pos, Float32.(fitns))
+            for _ in 1:next_generation_size
+                
+                mom_ms1 = wsample(ms1_at_pos,Float32.(fitns))
+                mom_ms2 = wsample(ms2_at_pos,Float32.(fitns))
+                dad_ms1 = wsample(ms1_at_pos,Float32.(fitns))
+                dad_ms2 = wsample(ms2_at_pos,Float32.(fitns))
 
                 gamete_mom_ms1 = copy(mom_ms1)
                 gamete_dad_ms1 = copy(dad_ms1)
                 gamete_mom_ms2 = copy(mom_ms2)
                 gamete_dad_ms2 = copy(dad_ms2)
 
-                crossover(gamete_mom_ms1, gamete_mom_ms2, pnt_wld_stats["n_loci"])
-                crossover(gamete_dad_ms1, gamete_dad_ms2, pnt_wld_stats["n_loci"])
-                mutate(
-                    gamete_mom_ms1,
-                    gamete_mom_ms2,
-                    pnt_wld_stats["mut_rate"],
-                    pnt_wld_stats["n_loci"],
-                )
-                mutate(
-                    gamete_dad_ms1,
-                    gamete_dad_ms2,
-                    pnt_wld_stats["mut_rate"],
-                    pnt_wld_stats["n_loci"],
-                )
+                crossover(gamete_mom_ms1,gamete_mom_ms2,pnt_wld_stats["n_loci"])
+                crossover(gamete_dad_ms1,gamete_dad_ms2,pnt_wld_stats["n_loci"])
+                mutate(gamete_mom_ms1,gamete_mom_ms2,pnt_wld_stats["mut_rate"],pnt_wld_stats["n_loci"])
+                mutate(gamete_dad_ms1,gamete_dad_ms2,pnt_wld_stats["mut_rate"],pnt_wld_stats["n_loci"])
 
-                move = calc_migr_dist(
-                    deme,
-                    pnt_wld_stats,
-                    migr_mode,
-                    bottleneck,
-                    max_migr,
-                    refl_walls,
-                    r_max_migr,
-                    r_coords,
-                )
+                move = calc_migr_dist(deme,pnt_wld_stats,migr_mode,bottleneck,max_migr,refl_walls,r_max_migr,r_coords)
 
-                indices = [deme[i] + move[i] for i = 1:wlddim]
+                indices = [deme[i] + move[i] for i in 1:wlddim]
 
-                if !isassigned(wld_ms1_next, indices...)
+                if !isassigned(wld_ms1_next,indices...)
                     wld_ms1_next[indices...] = []
                     wld_ms2_next[indices...] = []
                 end
-                push!(wld_ms1_next[indices...], gamete_mom_ms1)
-                push!(wld_ms2_next[indices...], gamete_dad_ms2)
+                push!(wld_ms1_next[indices...],gamete_mom_ms1)
+                push!(wld_ms2_next[indices...],gamete_dad_ms2)
 
                 birth_count += 1
                 all_birth_count += 1
             end
-
+            
             if pops_out
                 pops_next[deme...] = birth_count
             end
         end
     end
-
-    return wld_ms1_next,
-    wld_ms2_next,
-    mean_fitn_next,
-    pops_next,
-    muts_AAsel_next,
-    muts_Aasel_next,
-    muts_aasel_next,
-    muts_AAneu_next,
-    muts_Aaneu_next,
-    muts_aaneu_next
+    
+    return wld_ms1_next, wld_ms2_next, mean_fitn_next, pops_next, muts_AAsel_next, muts_Aasel_next, muts_aasel_next, muts_AAneu_next, muts_Aaneu_next, muts_aaneu_next
 end
 
 """
@@ -743,27 +609,15 @@ Output 2: a spatial array of demes that contain individuals' right monosome [Boo
 Output 3: world stats Dict
 
 """
-@inbounds function create_empty_world(
-    max = (DEF_X_MAX, DEF_Y_MAX);
-    min = (1, 1),
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    k_capacity = DEF_K_CAPACITY,
-    r_prolif_rate = DEF_R_PROLIF_RATE,
-    n_loci = DEF_N_LOCI,
-    n_sel_loci = DEF_N_SEL_LOCI,
-    mut_rate = DEF_MUT_RATE,
-    migr_rate = DEF_MIGR_RATE,
-    migr_mode = DEF_MIGR_MODE,
-    s_sel_coef = DEF_S_SEL_COEF,
-    h_domin_coef = DEF_H_DOMIN_COEF,
-    prop_of_del_muts = DEF_PROP_OF_DEL_MUTS,
-)
+@inbounds function create_empty_world(max=(DEF_X_MAX,DEF_Y_MAX); min=(1,1), name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), k_capacity=DEF_K_CAPACITY,
+    r_prolif_rate=DEF_R_PROLIF_RATE, n_loci=DEF_N_LOCI, n_sel_loci=DEF_N_SEL_LOCI,
+    mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, s_sel_coef=DEF_S_SEL_COEF, h_domin_coef=DEF_H_DOMIN_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS)
 
-    wld_ms1 = Array{Array{Array{Bool}}}(undef, max...) # array of left (in a pair) monosomes ("ms") of all individuals in space
-    wld_ms2 = Array{Array{Array{Bool}}}(undef, max...) # array of right (in a pair) monosomes ("ms") of all individuals in space
+    wld_ms1 = Array{Array{Array{Bool}}}(undef,max...) # array of left (in a pair) monosomes ("ms") of all individuals in space
+    wld_ms2 = Array{Array{Array{Bool}}}(undef,max...) # array of right (in a pair) monosomes ("ms") of all individuals in space
     for k in Iterators.product([1:n for n in max]...)
-        wld_ms1[k...] = Array{Bool,1}[]
-        wld_ms2[k...] = Array{Bool,1}[]
+        wld_ms1[k...] = Array{Bool, 1}[]
+        wld_ms2[k...] = Array{Bool, 1}[]
     end
 
     wld_stats = Dict(
@@ -780,11 +634,11 @@ Output 3: world stats Dict
         "s_sel_coef" => s_sel_coef,
         "h_domin_coef" => h_domin_coef,
         "prop_of_del_muts" => prop_of_del_muts,
-        "wlddim" => length(max),
+        "wlddim" => length(max)
         #"rangeexps" => []
     )
 
-    return wld_ms1, wld_ms2, wld_stats
+    return wld_ms1,wld_ms2,wld_stats
 end
 
 """
@@ -803,27 +657,20 @@ Fills random demes within given monosome arrays with finite-sites individuals. U
 `n_demes_to_fill`: number of demes to fill
 
 """
-@inbounds function fill_random_demes(
-    pnt_wld_ms1,
-    pnt_wld_ms2,
-    pnt_wld_stats,
-    fill::Vector{UnitRange{Int64}},
-    n_demes_to_fill = DEF_N_DEMES_STARTFILL,
-) # ::Array{Array{Array{Bool}}}
-
+@inbounds function fill_random_demes(pnt_wld_ms1,pnt_wld_ms2,pnt_wld_stats,fill::Vector{UnitRange{Int64}},n_demes_to_fill=DEF_N_DEMES_STARTFILL) # ::Array{Array{Array{Bool}}}
+    
     possible_init_coords = [collect(x) for x in Iterators.product(max_fill...)]
-    init_coords = sample(possible_init_coords, n_demes_to_fill; replace = false)
-    pnt_wld_stats["sel_loci"] =
-        randperm(pnt_wld_stats["n_loci"])[1:pnt_wld_stats["n_sel_loci"]]
+    init_coords = sample(possible_init_coords,n_demes_to_fill;replace=false)
+    pnt_wld_stats["sel_loci"] = randperm(pnt_wld_stats["n_loci"])[1:pnt_wld_stats["n_sel_loci"]]
 
     for coord in init_coords
-        if !isassigned(pnt_wld_ms1, coord...)
+        if !isassigned(pnt_wld_ms1,coord...)
             pnt_wld_ms1[coord...] = []
             pnt_wld_ms2[coord...] = []
         end
-        for _ = 1:pnt_wld_stats["k_capacity"]
-            push!(pnt_wld_ms1[coord...], falses(pnt_wld_stats["n_loci"]))
-            push!(pnt_wld_ms2[coord...], falses(pnt_wld_stats["n_loci"]))
+        for _ in 1:pnt_wld_stats["k_capacity"]
+            push!(pnt_wld_ms1[coord...],falses(pnt_wld_stats["n_loci"]))
+            push!(pnt_wld_ms2[coord...],falses(pnt_wld_stats["n_loci"]))
         end
     end
 
@@ -891,24 +738,9 @@ Output: a Dict containing data after the expansion:
 - **stats** - statistics array containing world and range expansion information
 - **fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
-function rangeexp(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    max_burnin = (DEF_X_MAX_BURNIN, DEF_Y_MAX),
-    max_exp = (DEF_X_MAX_EXP, DEF_Y_MAX),
-    max = (DEF_X_MAX, DEF_Y_MAX),
-    migr_mode = DEF_MIGR_MODE,
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    bottleneck = NaN,
-    r_max_burnin = 0,
-    r_max_exp = 0,
-    r_coords = [1, 2],
-    startfill_range = NaN,
-    wld_ms1 = NaN,
-    wld_ms2 = NaN,
-    wld_stats = NaN,
-)
+function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;max_burnin=(DEF_X_MAX_BURNIN,DEF_Y_MAX),max_exp=(DEF_X_MAX_EXP,DEF_Y_MAX),max=(DEF_X_MAX,DEF_Y_MAX),migr_mode=DEF_MIGR_MODE,
+    data_to_generate=DEF_DATA_TO_GENERATE,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),bottleneck=NaN,r_max_burnin=0,r_max_exp=0,r_coords=[1,2],
+    startfill_range=NaN,wld_ms1=NaN,wld_ms2=NaN,wld_stats=NaN)
 
     fitn_wld = NaN
     pops_wld = NaN
@@ -917,15 +749,15 @@ function rangeexp(
     muts_aasel_wld = NaN
     muts_AAneu_wld = NaN
     muts_Aaneu_wld = NaN
-    muts_aaneu_wld = NaN
+    muts_aaneu_wld = NaN    
 
     if !(wld_ms1 isa Array{Array{Array{Bool}}})
         #println("No world provided. Creating a new world.")
-        wld_ms1, wld_ms2, wld_stats = create_empty_world(max; name = name)
-        if !isa(startfill_range, Array) && !any(isnan, max_burnin)
+        wld_ms1,wld_ms2,wld_stats = create_empty_world(max;name=name)
+        if !isa(startfill_range,Array) && !any(isnan,max_burnin)
             startfill_range = [1:upper for upper in max_burnin]
         end
-        fill_random_demes(wld_ms1, wld_ms2, wld_stats, startfill_range)
+        fill_random_demes(wld_ms1,wld_ms2,wld_stats,startfill_range)
     end
 
     fitn_out = false
@@ -955,53 +787,33 @@ function rangeexp(
 
     wlddim = wld_stats["wlddim"]
 
-    n_gens_total = n_gens_burnin + n_gens_exp
-    @inbounds for g = 1:n_gens_total
-        if g <= n_gens_burnin
+    n_gens_total = n_gens_burnin+n_gens_exp
+    @inbounds for g in 1:n_gens_total
+        if g<=n_gens_burnin
             max_migr = max_burnin
             r_max_migr = r_max_burnin
         else
             max_migr = max_exp
             r_max_migr = r_max_exp
         end
-        wld_ms1,
-        wld_ms2,
-        mean_fitn_next,
-        pops_next,
-        muts_AAsel_next,
-        muts_Aasel_next,
-        muts_aasel_next,
-        muts_AAneu_next,
-        muts_Aaneu_next,
-        muts_aaneu_next = build_next_gen(
-            wld_ms1,
-            wld_ms2,
-            wld_stats,
-            fitn_out,
-            pops_out,
-            sel_out,
-            neu_out;
-            max_migr = max_migr,
-            migr_mode = migr_mode,
-            bottleneck = bottleneck,
-            r_max_migr = r_max_migr,
-            r_coords = r_coords,
-        )
+        wld_ms1,wld_ms2,mean_fitn_next,pops_next,muts_AAsel_next,muts_Aasel_next,muts_aasel_next,muts_AAneu_next,
+            muts_Aaneu_next,muts_aaneu_next = build_next_gen(wld_ms1,wld_ms2,wld_stats,fitn_out,pops_out,sel_out,neu_out;
+            max_migr=max_migr,migr_mode=migr_mode,bottleneck=bottleneck,r_max_migr=r_max_migr,r_coords=r_coords)
         if occursin("F", data_to_generate)
-            fitn_wld = cat(fitn_wld, mean_fitn_next, dims = wlddim + 1)
+            fitn_wld = cat(fitn_wld, mean_fitn_next, dims=wlddim+1)
         end
         if occursin("P", data_to_generate)
-            pops_wld = cat(pops_wld, pops_next, dims = wlddim + 1)
+            pops_wld = cat(pops_wld, pops_next, dims=wlddim+1)
         end
         if occursin("S", data_to_generate)
-            muts_AAsel_wld = cat(muts_AAsel_wld, muts_AAsel_next, dims = wlddim + 1)
-            muts_Aasel_wld = cat(muts_Aasel_wld, muts_Aasel_next, dims = wlddim + 1)
-            muts_aasel_wld = cat(muts_aasel_wld, muts_aasel_next, dims = wlddim + 1)
+            muts_AAsel_wld = cat(muts_AAsel_wld, muts_AAsel_next, dims=wlddim+1)
+            muts_Aasel_wld = cat(muts_Aasel_wld, muts_Aasel_next, dims=wlddim+1)
+            muts_aasel_wld = cat(muts_aasel_wld, muts_aasel_next, dims=wlddim+1)
         end
         if occursin("N", data_to_generate)
-            muts_AAneu_wld = cat(muts_AAneu_wld, muts_AAneu_next, dims = wlddim + 1)
-            muts_Aaneu_wld = cat(muts_Aaneu_wld, muts_Aaneu_next, dims = wlddim + 1)
-            muts_aaneu_wld = cat(muts_aaneu_wld, muts_aaneu_next, dims = wlddim + 1)
+            muts_AAneu_wld = cat(muts_AAneu_wld, muts_AAneu_next, dims=wlddim+1)
+            muts_Aaneu_wld = cat(muts_Aaneu_wld, muts_Aaneu_next, dims=wlddim+1)
+            muts_aaneu_wld = cat(muts_aaneu_wld, muts_aaneu_next, dims=wlddim+1)
         end
     end
 
@@ -1016,7 +828,7 @@ function rangeexp(
     wld_stats["n_gens_burnin"] = n_gens_burnin
     wld_stats["n_gens_exp"] = n_gens_exp
     wld_stats["n_gens"] = n_gens_total
-
+    
     #= res = []
     function needed_data(symb,arr,res)
         if occursin("P", data_to_generate)
@@ -1024,17 +836,8 @@ function rangeexp(
         end
     end
     needed_data("P",pops_wld) =#
-    return Dict(
-        "stats" => wld_stats,
-        "fitn" => fitn_wld,
-        "pops" => pops_wld,
-        "AAsel" => muts_AAsel_wld,
-        "Aasel" => muts_Aasel_wld,
-        "aasel" => muts_aasel_wld,
-        "AAneu" => muts_AAneu_wld,
-        "Aaneu" => muts_Aaneu_wld,
-        "aaneu" => muts_aaneu_wld,
-    )
+    return Dict("stats"=>wld_stats,"fitn"=>fitn_wld,"pops"=>pops_wld,"AAsel"=>muts_AAsel_wld,"Aasel"=>muts_Aasel_wld,
+        "aasel"=>muts_aasel_wld,"AAneu"=>muts_AAneu_wld,"Aaneu"=>muts_Aaneu_wld,"aaneu"=>muts_aaneu_wld)
 end
 
 
@@ -1070,20 +873,14 @@ Output 3: number of deleterious neutral mutations
 Output 4: number of beneficial neutral mutations
 
 """
-@inbounds function mutate_inf(
-    person,
-    mut_rate,
-    n_segr_regions,
-    s_sel_coef,
-    prop_of_sel_loci,
-)
+@inbounds function mutate_inf(person,mut_rate,n_segr_regions,s_sel_coef,prop_of_sel_loci)
     get_mutation_random = rand(Poisson(mut_rate))
     muts_delsel = 0
     muts_bensel = 0
     muts_delneu = 0
     muts_benneu = 0
 
-    @fastmath @inbounds for _ = 1:get_mutation_random
+    @fastmath @inbounds for _ in 1:get_mutation_random
         pos_alter = sample(1:n_segr_regions*2)
 
         if rand() < mut_rate
@@ -1102,7 +899,7 @@ Output 4: number of beneficial neutral mutations
             end
         end
     end
-
+    
     return muts_delsel, muts_bensel, muts_delneu, muts_benneu
 end
 
@@ -1115,10 +912,10 @@ Recombines loci with a 1/2 chance. Used when building the next generation in inf
 
 `n_segr_regions`: number of segregating regions
 """
-@inbounds function crossover_inf(person, n_segr_regions)
-    for i = 1:n_segr_regions
+@inbounds function crossover_inf(person,n_segr_regions)
+    for i in 1:n_segr_regions
         lr = rand(1:2)
-        person[i] = lr == 1 ? person[i] : person[i+n_segr_regions]
+        person[i] = lr==1 ? person[i] : person[i+n_segr_regions]
     end
 end
 
@@ -1139,10 +936,10 @@ Creates a zygote from two individuals. Used when building the next generation in
 
 Output: segr. regions (fitness) array of a zygote
 """
-@inbounds function mate_inf(ind1, ind2, n_segr_regions)
-    lr1 = rand(1:2) == 1 ? (1:n_segr_regions) : ((n_segr_regions+1):(n_segr_regions*2))
-    lr2 = rand(1:2) == 1 ? (1:n_segr_regions) : ((n_segr_regions+1):(n_segr_regions*2))
-    return vcat(ind1[lr1], ind2[lr2])
+@inbounds function mate_inf(ind1,ind2,n_segr_regions)
+    lr1 = rand(1:2)==1 ? (1:n_segr_regions) : ((n_segr_regions+1):(n_segr_regions*2))
+    lr2 = rand(1:2)==1 ? (1:n_segr_regions) : ((n_segr_regions+1):(n_segr_regions*2))
+    return vcat(ind1[lr1],ind2[lr2])
 end
 
 """
@@ -1199,28 +996,16 @@ Output 6: a spatial array of demes with average deleterious neutral mutation cou
 
 Output 7: a spatial array of demes with average beneficial neutral mutation count in the new generation
 """
-@inbounds function build_next_gen_inf(
-    pnt_wld::Array{Array{Array{Float32}}},
-    pnt_wld_stats,
-    fitn_out = false,
-    pops_out = false,
-    sel_out = false,
-    neu_out = false;
-    max_migr = NaN,
-    migr_mode = DEF_MIGR_MODE,
-    bottleneck = NaN,
-    refl_walls = false,
-    r_max_migr = 0,
-    r_coords = [1, 2],
-)
+@inbounds function build_next_gen_inf(pnt_wld::Array{Array{Array{Float32}}},pnt_wld_stats,fitn_out=false,pops_out=false,sel_out=false,neu_out=false;
+    max_migr=NaN,migr_mode=DEF_MIGR_MODE,bottleneck=NaN,refl_walls=false,r_max_migr=0,r_coords=[1,2])
 
     wlddim = pnt_wld_stats["wlddim"]
 
     # Determine the number of offspring for each deme
-    next_gen_posits, next_gen_pops = calc_offspring(pnt_wld, pnt_wld_stats)
-
+    next_gen_posits, next_gen_pops = calc_offspring(pnt_wld,pnt_wld_stats)
+    
     # Define the habitat (world) and the data arrays in the next generation
-    wld_next = Array{Array{Array{Float32}},wlddim}(undef, pnt_wld_stats["max"]...)
+    wld_next = Array{Array{Array{Float32}}, wlddim}(undef,pnt_wld_stats["max"]...)
     mean_fitn_next = NaN
     pops_next = NaN
     muts_delsel_next = NaN
@@ -1231,27 +1016,27 @@ Output 7: a spatial array of demes with average beneficial neutral mutation coun
 
     # Fill the next generation habitat
     if fitn_out
-        mean_fitn_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        fill!(mean_fitn_next, NaN)
+        mean_fitn_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        fill!(mean_fitn_next,NaN)
     end
     if pops_out
-        pops_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        fill!(pops_next, NaN)
+        pops_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        fill!(pops_next,NaN)
     end
     if sel_out
-        muts_delsel_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        muts_bensel_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        fill!(muts_delsel_next, NaN)
-        fill!(muts_bensel_next, NaN)
+        muts_delsel_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        muts_bensel_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        fill!(muts_delsel_next,NaN)
+        fill!(muts_bensel_next,NaN)
     end
     if neu_out
-        muts_delneu_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        muts_benneu_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        fill!(muts_delneu_next, NaN)
-        fill!(muts_benneu_next, NaN)
+        muts_delneu_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        muts_benneu_next = Array{Float32}(undef,pnt_wld_stats["max"]...)
+        fill!(muts_delneu_next,NaN)
+        fill!(muts_benneu_next,NaN)
     end
-
-
+    
+    
     for deme in next_gen_posits
         inds_at_pos = pnt_wld[deme...]
         fitns = prod.(inds_at_pos)
@@ -1261,28 +1046,21 @@ Output 7: a spatial array of demes with average beneficial neutral mutation coun
         end
 
         next_generation_size = next_gen_pops[deme...]
-
+        
         if next_generation_size > 0
             birth_count = 0
-            for _ = 1:next_generation_size
-                mom = wsample(inds_at_pos, fitns)
-                dad = wsample(inds_at_pos, fitns)
-
+            for _ in 1:next_generation_size
+                mom = wsample(inds_at_pos,fitns)
+                dad = wsample(inds_at_pos,fitns)
+                
                 gamete_mom = copy(mom)
                 gamete_dad = copy(dad)
 
-                crossover_inf(gamete_mom, pnt_wld_stats["n_segr_regions"])
-                crossover_inf(gamete_dad, pnt_wld_stats["n_segr_regions"])
-                mate_result =
-                    mate_inf(gamete_mom, gamete_dad, pnt_wld_stats["n_segr_regions"])
+                crossover_inf(gamete_mom,pnt_wld_stats["n_segr_regions"])
+                crossover_inf(gamete_dad,pnt_wld_stats["n_segr_regions"])
+                mate_result = mate_inf(gamete_mom,gamete_dad,pnt_wld_stats["n_segr_regions"])
 
-                muts_delsel, muts_bensel, muts_delneu, muts_benneu = mutate_inf(
-                    mate_result,
-                    pnt_wld_stats["mut_rate"],
-                    pnt_wld_stats["n_segr_regions"],
-                    pnt_wld_stats["s_sel_coef"],
-                    pnt_wld_stats["prop_of_sel_loci"],
-                )
+                muts_delsel, muts_bensel, muts_delneu, muts_benneu = mutate_inf(mate_result,pnt_wld_stats["mut_rate"],pnt_wld_stats["n_segr_regions"],pnt_wld_stats["s_sel_coef"],pnt_wld_stats["prop_of_sel_loci"])
                 if sel_out
                     if isnan(muts_delsel_next[deme...])
                         muts_delsel_next[deme...] = 0
@@ -1303,42 +1081,27 @@ Output 7: a spatial array of demes with average beneficial neutral mutation coun
                     muts_delneu_next[deme...] += muts_delneu
                     muts_benneu_next[deme...] += muts_benneu
                 end
+                
+                move = calc_migr_dist(deme,pnt_wld_stats,migr_mode,bottleneck,max_migr,refl_walls,r_max_migr,r_coords)
 
-                move = calc_migr_dist(
-                    deme,
-                    pnt_wld_stats,
-                    migr_mode,
-                    bottleneck,
-                    max_migr,
-                    refl_walls,
-                    r_max_migr,
-                    r_coords,
-                )
+                indices = [deme[i] + move[i] for i in 1:wlddim]
 
-                indices = [deme[i] + move[i] for i = 1:wlddim]
-
-                if !isassigned(wld_next, indices...)
+                if !isassigned(wld_next,indices...)
                     wld_next[indices...] = []
                 end
-                push!(wld_next[indices...], mate_result)
+                push!(wld_next[indices...],mate_result)
 
                 birth_count += 1
                 all_birth_count += 1
             end
-
+            
             if pops_out
                 pops_next[deme...] = birth_count
             end
         end
     end
-
-    return wld_next,
-    mean_fitn_next,
-    pops_next,
-    muts_delsel_next,
-    muts_bensel_next,
-    muts_delneu_next,
-    muts_benneu_next
+    
+    return wld_next, mean_fitn_next, pops_next, muts_delsel_next, muts_bensel_next, muts_delneu_next, muts_benneu_next
 end
 
 """
@@ -1380,23 +1143,13 @@ Output 1: a spatial array of demes that contain individuals' segr. regions [Floa
 Output 3: world stats Dict
 
 """
-function create_empty_world_inf(
-    max = (DEF_X_MAX, DEF_Y_MAX);
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    k_capacity = DEF_K_CAPACITY,
-    r_prolif_rate = DEF_R_PROLIF_RATE,
-    n_segr_regions = DEF_N_SEGR_REGIONS,
-    mut_rate = DEF_MUT_RATE,
-    migr_rate = DEF_MIGR_RATE,
-    migr_mode = DEF_MIGR_MODE,
-    s_sel_coef = DEF_S_SEL_COEF,
-    prop_of_del_muts = DEF_PROP_OF_DEL_MUTS,
-    prop_of_sel_loci = DEF_PROP_OF_SEL_LOCI,
-)
+function create_empty_world_inf(max=(DEF_X_MAX,DEF_Y_MAX);name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),k_capacity=DEF_K_CAPACITY,
+    r_prolif_rate=DEF_R_PROLIF_RATE,n_segr_regions=DEF_N_SEGR_REGIONS,
+    mut_rate=DEF_MUT_RATE,migr_rate=DEF_MIGR_RATE,migr_mode=DEF_MIGR_MODE,s_sel_coef=DEF_S_SEL_COEF,prop_of_del_muts=DEF_PROP_OF_DEL_MUTS,prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI)
 
-    wld = Array{Array{Array{Float32}}}(undef, max...) # array of fitness values of all individuals in space
+    wld = Array{Array{Array{Float32}}}(undef,max...) # array of fitness values of all individuals in space
     for k in Iterators.product([1:n for n in max]...)
-        wld[k...] = Array{Float32,1}[]
+        wld[k...] = Array{Float32, 1}[]
     end
 
     wld_stats = Dict(
@@ -1411,11 +1164,11 @@ function create_empty_world_inf(
         "s_sel_coef" => s_sel_coef,
         "prop_of_del_muts" => prop_of_del_muts,
         "prop_of_sel_loci" => prop_of_sel_loci,
-        "wlddim" => length(max),
+        "wlddim" => length(max)
         #"rangeexps" => []
     )
 
-    return wld, wld_stats
+    return wld,wld_stats
 end
 
 """
@@ -1432,22 +1185,17 @@ Fills random demes within given monosome arrays with infinite-sites individuals.
 `n_demes_to_fill`: number of demes to fill
 
 """
-function fill_random_demes_inf(
-    pnt_wld::Array{Array{Array{Float32}}},
-    pnt_wld_stats,
-    fill::Vector{UnitRange{Int64}},
-    n_demes_to_fill = DEF_N_DEMES_STARTFILL,
-)
+function fill_random_demes_inf(pnt_wld::Array{Array{Array{Float32}}},pnt_wld_stats,fill::Vector{UnitRange{Int64}},n_demes_to_fill=DEF_N_DEMES_STARTFILL)
 
     possible_init_coords = [collect(x) for x in Iterators.product(fill...)]
-    init_coords = sample(possible_init_coords, n_demes_to_fill; replace = false)
+    init_coords = sample(possible_init_coords,n_demes_to_fill;replace=false)
 
     for coord in init_coords
-        if !isassigned(pnt_wld, coord...)
+        if !isassigned(pnt_wld,coord...)
             pnt_wld[coord...] = []
         end
-        for _ = 1:pnt_wld_stats["k_capacity"]
-            push!(pnt_wld[coord...], ones(pnt_wld_stats["n_segr_regions"] * 2))
+        for _ in 1:pnt_wld_stats["k_capacity"]
+            push!(pnt_wld[coord...],ones(pnt_wld_stats["n_segr_regions"]*2))
         end
     end
 
@@ -1515,24 +1263,9 @@ Output: a Dict containing data after the expansion:
 - **stats** - statistics array containing world and range expansion information
 - **fitn**, **pops**, **delsel**, **bensel**, **delneu**, **benneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
-function rangeexp_inf(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    max_burnin = (DEF_X_MAX_BURNIN, DEF_Y_MAX),
-    max_exp = (DEF_X_MAX_EXP, DEF_Y_MAX),
-    max = (DEF_X_MAX, DEF_Y_MAX),
-    migr_mode = DEF_MIGR_MODE,
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    prop_of_sel_loci = DEF_PROP_OF_SEL_LOCI,
-    bottleneck = NaN,
-    r_max_burnin = 0,
-    r_max_exp = 0,
-    r_coords = [1, 2],
-    startfill_range = NaN,
-    wld = NaN,
-    wld_stats = NaN,
-)
+function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;max_burnin=(DEF_X_MAX_BURNIN,DEF_Y_MAX),max_exp=(DEF_X_MAX_EXP,DEF_Y_MAX),max=(DEF_X_MAX,DEF_Y_MAX),migr_mode=DEF_MIGR_MODE,
+    data_to_generate=DEF_DATA_TO_GENERATE,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI,bottleneck=NaN,r_max_burnin=0,r_max_exp=0,
+    r_coords=[1,2],startfill_range=NaN,wld=NaN,wld_stats=NaN)
 
     fitn_wld = NaN
     pops_wld = NaN
@@ -1543,12 +1276,11 @@ function rangeexp_inf(
 
     if !(wld isa Array{Array{Array{Float32}}})
         #println("No world provided. Creating a new world.")
-        wld, wld_stats =
-            create_empty_world_inf(max; name = name, prop_of_sel_loci = prop_of_sel_loci)
-        if !isa(startfill_range, Tuple) && !any(isnan, max_burnin)
+        wld,wld_stats = create_empty_world_inf(max;name=name,prop_of_sel_loci=prop_of_sel_loci)
+        if !isa(startfill_range,Tuple) && !any(isnan,max_burnin)
             startfill_range = [1:upper for upper in max_burnin]
         end
-        fill_random_demes_inf(wld, wld_stats, startfill_range)
+        fill_random_demes_inf(wld,wld_stats,startfill_range)
     end
 
     fitn_out = false
@@ -1576,9 +1308,9 @@ function rangeexp_inf(
 
     wlddim = wld_stats["wlddim"]
 
-    n_gens_total = n_gens_burnin + n_gens_exp
-    @inbounds for g = 1:n_gens_total
-        if g <= n_gens_burnin
+    n_gens_total = n_gens_burnin+n_gens_exp
+    @inbounds for g in 1:n_gens_total
+        if g<=n_gens_burnin
             max_migr = max_burnin
             r_max_migr = r_max_burnin
         else
@@ -1586,39 +1318,22 @@ function rangeexp_inf(
             r_max_migr = r_max_exp
         end
 
-        wld,
-        mean_fitn_next,
-        pops_next,
-        muts_delsel_next,
-        muts_bensel_next,
-        muts_delneu_next,
-        muts_benneu_next = build_next_gen_inf(
-            wld,
-            wld_stats,
-            fitn_out,
-            pops_out,
-            sel_out,
-            neu_out;
-            max_migr = max_migr,
-            migr_mode = migr_mode,
-            bottleneck = bottleneck,
-            r_max_migr = r_max_migr,
-            r_coords = r_coords,
-        )
+        wld, mean_fitn_next, pops_next, muts_delsel_next, muts_bensel_next, muts_delneu_next, muts_benneu_next = build_next_gen_inf(wld,wld_stats,fitn_out,pops_out,sel_out,neu_out;
+            max_migr=max_migr,migr_mode=migr_mode,bottleneck=bottleneck,r_max_migr=r_max_migr,r_coords=r_coords)
 
         if occursin("F", data_to_generate)
-            fitn_wld = cat(fitn_wld, mean_fitn_next, dims = wlddim + 1)
+            fitn_wld = cat(fitn_wld, mean_fitn_next, dims=wlddim+1)
         end
         if occursin("P", data_to_generate)
-            pops_wld = cat(pops_wld, pops_next, dims = wlddim + 1)
+            pops_wld = cat(pops_wld, pops_next, dims=wlddim+1)
         end
         if occursin("S", data_to_generate)
-            muts_delsel_wld = cat(muts_delsel_wld, muts_delsel_next, dims = wlddim + 1)
-            muts_bensel_wld = cat(muts_bensel_wld, muts_bensel_next, dims = wlddim + 1)
+            muts_delsel_wld = cat(muts_delsel_wld, muts_delsel_next, dims=wlddim+1)
+            muts_bensel_wld = cat(muts_bensel_wld, muts_bensel_next, dims=wlddim+1)
         end
         if occursin("N", data_to_generate)
-            muts_delneu_wld = cat(muts_delneu_wld, muts_delneu_next, dims = wlddim + 1)
-            muts_benneu_wld = cat(muts_benneu_wld, muts_benneu_next, dims = wlddim + 1)
+            muts_delneu_wld = cat(muts_delneu_wld, muts_delneu_next, dims=wlddim+1)
+            muts_benneu_wld = cat(muts_benneu_wld, muts_benneu_next, dims=wlddim+1)
         end
     end
 
@@ -1627,16 +1342,9 @@ function rangeexp_inf(
     wld_stats["n_gens_burnin"] = n_gens_burnin
     wld_stats["n_gens_exp"] = n_gens_exp
     wld_stats["n_gens"] = n_gens_total
-
-    return Dict(
-        "stats" => wld_stats,
-        "fitn" => fitn_wld,
-        "pops" => pops_wld,
-        "delsel" => muts_delsel_wld,
-        "delneu" => muts_delneu_wld,
-        "bensel" => muts_bensel_wld,
-        "benneu" => muts_benneu_wld,
-    )
+    
+    return Dict("stats"=>wld_stats,"fitn"=>fitn_wld,"pops"=>pops_wld,"delsel"=>muts_delsel_wld,"delneu"=>muts_delneu_wld,
+        "bensel"=>muts_bensel_wld,"benneu"=>muts_benneu_wld)
 end
 
 
@@ -1662,48 +1370,33 @@ Shows an animated heatmap of `data` from `gen_start` to `gen_end`.
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap(
-    data::Array,
-    dims::Int,
-    gen_start = 1,
-    gen_end = DEF_N_GENS_BURNIN + DEF_N_GENS_EXP;
-    slow_factor = 1,
-    log_base = -1,
-    clim = :default,
-    kwargs...,
-)
-
+function re_heatmap(data::Array,dims::Int,gen_start=1,gen_end=DEF_N_GENS_BURNIN+DEF_N_GENS_EXP;slow_factor=1,log_base=-1,clim=:default, kwargs...)
+    
     # Override default clim, since it's too hectic in animations
-    if clim == :default
-        no_nans = filter(!isnan, data)
-        clim = (minimum(no_nans), maximum(no_nans))
+    if clim==:default
+        no_nans = filter(!isnan,data)
+        clim = (minimum(no_nans),maximum(no_nans))
     end
 
-    @gif for i = gen_start:(gen_end*slow_factor-1)
-        gen_no = trunc(Int, i / slow_factor) + 1
+    @gif for i in gen_start:(gen_end*slow_factor-1)
+        gen_no = trunc(Int,i/slow_factor)+1
 
-        if all(isnan, multi_index(data, gen_no, dims))
+        if all(isnan,multi_index(data,gen_no,dims))
             println("No values found in any deme.")
         end
 
-        if log_base > 0 && log_base == 1
-            obj = log.(log_base, multi_index(data, gen_no, dims)')
+        if log_base>0 && log_base==1
+            obj = log.(log_base,multi_index(data,gen_no,dims)')
         else
-            obj = multi_index(data, gen_no, dims)'
+            obj = multi_index(data,gen_no,dims)'
         end
 
-        if dims == 2 # Including time
-            Plots.heatmap(
-                obj,
-                ylabel = "Generation $gen_no",
-                size = (1200, 200),
-                clim = clim;
-                kwargs...,
-            )
+        if dims==2 # Including time
+            Plots.heatmap(obj,ylabel="Generation $gen_no",size=(1200,200),clim=clim; kwargs...)
         else
-            Plots.heatmap(obj, ylabel = "Generation $gen_no", clim = clim; kwargs...)
+            Plots.heatmap(obj,ylabel="Generation $gen_no",clim=clim; kwargs...)
         end
-
+        
     end
 end
 
@@ -1728,29 +1421,11 @@ Shows an animated heatmap of `dataname` in `re` from `gen_start` to `gen_end`.
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap(
-    re::Dict,
-    dataname::String,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    log_base = -1,
-    clim = :default,
-    kwargs...,
-)
-    if !isa(re[dataname], Array)
+function re_heatmap(re::Dict,dataname::String,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,log_base=-1,clim=:default, kwargs...)
+    if !isa(re[dataname],Array)
         println("This data was not generated.")
     else
-        re_heatmap(
-            re[dataname],
-            re["stats"]["wlddim"] + 1,
-            gen_start,
-            gen_end;
-            slow_factor = slow_factor,
-            log_base = log_base,
-            clim = clim,
-            kwargs...,
-        )
+        re_heatmap(re[dataname],re["stats"]["wlddim"]+1,gen_start,gen_end;slow_factor=slow_factor,log_base=log_base,clim=clim, kwargs...)
     end
 end
 
@@ -1774,25 +1449,8 @@ Shows population data of `re` from `gen_start` to `gen_end`.
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_pops(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, re["stats"]["k_capacity"]),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "pops",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_pops(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,re["stats"]["k_capacity"]),log_base=-1,kwargs...)
+    re_heatmap(re,"pops",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -1814,25 +1472,8 @@ Shows deme-average fitness data of `re` from `gen_start` to `gen_end`.
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_fitn(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, 1),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "fitn",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_fitn(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,1),log_base=-1,kwargs...)
+    re_heatmap(re,"fitn",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -1854,25 +1495,8 @@ Shows deme-average selected AA (homozygosity) mutations of `re` from `gen_start`
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_AAsel(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, length(re["stats"]["sel_loci"])),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "AAsel",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_AAsel(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,length(re["stats"]["sel_loci"])),log_base=-1,kwargs...)
+    re_heatmap(re,"AAsel",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -1894,25 +1518,8 @@ Shows deme-average selected Aa (heterozygosity) mutations of `re` from `gen_star
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_Aasel(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, length(re["stats"]["sel_loci"])),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "Aasel",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_Aasel(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,length(re["stats"]["sel_loci"])),log_base=-1,kwargs...)
+    re_heatmap(re,"Aasel",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -1934,25 +1541,8 @@ Shows deme-average selected aa (homozygosity) mutations of `re` from `gen_start`
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_aasel(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, length(re["stats"]["sel_loci"])),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "aasel",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_aasel(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,length(re["stats"]["sel_loci"])),log_base=-1,kwargs...)
+    re_heatmap(re,"aasel",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -1974,25 +1564,8 @@ Shows deme-average neutral AA (homozygosity) mutations of `re` from `gen_start` 
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_AAneu(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, re["stats"]["n_loci"] - length(re["stats"]["sel_loci"])),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "AAneu",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_AAneu(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,re["stats"]["n_loci"]-length(re["stats"]["sel_loci"])),log_base=-1,kwargs...)
+    re_heatmap(re,"AAneu",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -2014,25 +1587,8 @@ Shows deme-average neutral Aa (heterozygosity) mutations of `re` from `gen_start
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_Aaneu(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, re["stats"]["n_loci"] - length(re["stats"]["sel_loci"])),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "Aaneu",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_Aaneu(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,re["stats"]["n_loci"]-length(re["stats"]["sel_loci"])),log_base=-1,kwargs...)
+    re_heatmap(re,"Aaneu",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -2054,25 +1610,8 @@ Shows deme-average neutral aa (homozygosity) mutations of `re` from `gen_start` 
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_aaneu(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, re["stats"]["n_loci"] - length(re["stats"]["sel_loci"])),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "aaneu",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_aaneu(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,re["stats"]["n_loci"]-length(re["stats"]["sel_loci"])),log_base=-1,kwargs...)
+    re_heatmap(re,"aaneu",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -2094,25 +1633,8 @@ Shows deme-average selected deleterious mutations count of `re` from `gen_start`
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_delsel(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, 50),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "delsel",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_delsel(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,50),log_base=-1,kwargs...)
+    re_heatmap(re,"delsel",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -2134,25 +1656,8 @@ Shows deme-average neutral deleterious mutations count of `re` from `gen_start` 
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_delneu(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, 50),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "delneu",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_delneu(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,50),log_base=-1,kwargs...)
+    re_heatmap(re,"delneu",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -2174,25 +1679,8 @@ Shows deme-average selected beneficial mutations count of `re` from `gen_start` 
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_bensel(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, 50),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "bensel",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_bensel(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,50),log_base=-1,kwargs...)
+    re_heatmap(re,"bensel",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -2214,25 +1702,8 @@ Shows deme-average neutral beneficial mutations count of `re` from `gen_start` t
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_benneu(
-    re::Dict,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    slow_factor = 1,
-    clim = (0, 50),
-    log_base = -1,
-    kwargs...,
-)
-    re_heatmap(
-        re,
-        "benneu",
-        gen_start,
-        gen_end;
-        slow_factor = slow_factor,
-        clim = clim,
-        log_base = log_base,
-        kwargs...,
-    )
+function re_heatmap_benneu(re::Dict,gen_start=1,gen_end=re["stats"]["n_gens"];slow_factor=1,clim=(0,50),log_base=-1,kwargs...)
+    re_heatmap(re,"benneu",gen_start,gen_end;slow_factor=slow_factor,clim=clim,log_base=log_base,kwargs...)
 end
 
 """
@@ -2252,32 +1723,18 @@ Shows a heatstack (3d heatmap) of `data`.
 
 `scene`: if specified, use a custom GLMakie scene
 """
-function re_heatstack_frame(
-    data::Array,
-    x_range,
-    z_range,
-    clim;
-    title = "",
-    scene = Figure(),
-)
+function re_heatstack_frame(data::Array,x_range,z_range,clim;title="",scene=Figure())
     toNaN(x) = x < 0 ? NaN : x
     data = toNaN.(data)
-    ax = Axis3(scene[1, 1], aspect = (1, 1, 1), elevation = π / 6)
-    if title != ""
-        ax.title = title
+    ax = Axis3(scene[1, 1], aspect=(1, 1, 1), elevation=π/6)
+    if title!=""
+        ax.title=title
     end
 
     for i in z_range
-        hm = GLMakie.heatmap!(
-            ax,
-            x_range,
-            x_range,
-            multi_index(data, i, 3),
-            colorrange = clim,
-            colormap = (:thermal, 0.25),
-        )
+        hm = GLMakie.heatmap!(ax, x_range, x_range, multi_index(data,i,3), colorrange=clim, colormap=(:thermal,0.25))
         GLMakie.translate!(hm, 0, 0, z_range[i])
-
+        
         i == 1 && Colorbar(scene[1, 2], hm) # Add the colorbar once
     end
 
@@ -2304,16 +1761,8 @@ Shows a heatstack (3d heatmap) of `dataname` in `re`.
 
 `scene`: if specified, use a custom GLMakie scene
 """
-function re_heatstack_frame(
-    re::Dict,
-    dataname::String,
-    x_range = 1:re["stats"]["max"][1],
-    z_range = 1:re["stats"]["max"][3],
-    clim = (minimum(filter(!isnan, re[dataname])), maximum(filter(!isnan, re[dataname])));
-    title = "",
-    scene = Figure(),
-)
-    re_heatstack_frame(re[dataname], x_range, z_range, clim; title = title, scene = scene)
+function re_heatstack_frame(re::Dict,dataname::String,x_range=1:re["stats"]["max"][1],z_range=1:re["stats"]["max"][3],clim=(minimum(filter(!isnan,re[dataname])),maximum(filter(!isnan,re[dataname])));title="",scene=Figure())
+    re_heatstack_frame(re[dataname],x_range,z_range,clim;title=title,scene=scene)
 end
 
 """
@@ -2333,42 +1782,21 @@ Shows an animated heatstack (3d heatmap) of `data`.
 
 `n_gen_burnin`: number of burn-in next_generation_size
 """
-function re_heatstack(
-    data::Array,
-    gen_start,
-    gen_end;
-    clim = NaN,
-    x_range = 1:1,
-    z_range = 1:1,
-    title = "",
-    n_gen_burnin = 0,
-)
+function re_heatstack(data::Array,gen_start,gen_end;clim=NaN,x_range=1:1,z_range=1:1,title="",n_gen_burnin=0)
     scene = Figure()
 
     if isnan(clim)
-        no_nans = filter(!isnan, data)
-        clim = (minimum(no_nans), maximum(no_nans))
+        no_nans = filter(!isnan,data)
+        clim = (minimum(no_nans),maximum(no_nans))
         println(clim)
     end
 
-    record(
-        scene,
-        "../../animations/" *
-        Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS") *
-        ".mp4",
-    ) do io
-        for i = gen_start:gen_end
-            if title == ""
-                ti = "Generation " * string(i - n_gen_burnin)
+    record(scene, "../../animations/"*Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS")*".mp4") do io
+        for i in gen_start:gen_end
+            if title==""
+                ti = "Generation "*string(i-n_gen_burnin)
             end
-            re_heatstack_frame(
-                multi_index(data, i, 4),
-                x_range,
-                z_range,
-                clim;
-                title = ti,
-                scene = scene,
-            )
+            re_heatstack_frame(multi_index(data,i,4),x_range,z_range,clim;title=ti,scene=scene)
             recordframe!(io)
             empty!(scene)
         end
@@ -2396,32 +1824,11 @@ Shows an animated heatstack (3d heatmap) of `dataname` in `re`.
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatstack(
-    re::Dict,
-    dataname::String,
-    gen_start = 1,
-    gen_end = re["stats"]["n_gens"];
-    clim = NaN,
-    x_range = 1:re["stats"]["max"][1],
-    z_range = 1:re["stats"]["max"][3],
-    title = "",
-    n_gen_burnin = re["stats"]["n_gens_burnin"],
-    kwargs...,
-)
-    if !isa(re[dataname], Array)
+function re_heatstack(re::Dict,dataname::String,gen_start=1,gen_end=re["stats"]["n_gens"];clim=NaN,x_range=1:re["stats"]["max"][1],z_range=1:re["stats"]["max"][3],title="",n_gen_burnin=re["stats"]["n_gens_burnin"], kwargs...)
+    if !isa(re[dataname],Array)
         println("This data was not generated.")
     else
-        re_heatstack(
-            re[dataname],
-            gen_start,
-            gen_end;
-            clim = clim,
-            x_range = x_range,
-            z_range = z_range,
-            title = title,
-            n_gen_burnin = n_gen_burnin,
-            kwargs...,
-        )
+        re_heatstack(re[dataname],gen_start,gen_end;clim=clim,x_range=x_range,z_range=z_range,title=title,n_gen_burnin=n_gen_burnin, kwargs...)
     end
 end
 
@@ -2445,10 +1852,10 @@ Finds the average values of `data` over the whole population for each generation
 
 Output: array of averages of `data` for every generation
 """
-function average_all(data::Array, n_gens::Int, dims::Int)
-    res = Array{Float32}(undef, 0)
-    for j = 1:n_gens
-        push!(res, mean(filter(!isnan, multi_index(data, j, dims))))
+function average_all(data::Array,n_gens::Int,dims::Int)
+    res = Array{Float32}(undef,0)
+    for j in 1:n_gens
+        push!(res,mean(filter(!isnan,multi_index(data,j,dims))))
     end
     return res
 end
@@ -2466,8 +1873,8 @@ Finds the average values of `dataname` in `re` over the whole population for eac
 
 Output: array of averages of `re[dataname]` for every generation
 """
-function average_all(re::Dict, dataname::String)
-    average_all(re[dataname], re["stats"]["n_gens"], re["stats"]["wlddim"] + 1)
+function average_all(re::Dict,dataname::String)
+    average_all(re[dataname],re["stats"]["n_gens"],re["stats"]["wlddim"]+1)
 end
 
 """
@@ -2489,88 +1896,64 @@ Finds the average value of `data` between all demes at the expansion front.
 
 Output: array of averages of `data` for every generation
 """
-function average_front(
-    data::Array,
-    n_gens,
-    x_max;
-    greaterzero = false,
-    oneside = false,
-    divide = true,
-)
-    av_arr = Array{Float32}(undef, 0)
+function average_front(data::Array,n_gens,x_max;greaterzero=false,oneside=false,divide=true)
+    av_arr = Array{Float32}(undef,0)
 
-    for j = 1:n_gens
+    for j in 1:n_gens
         a_sum = 0
         cnt = 0
         frontier = x_max
-        while frontier != 1 &&
-            (isnan(data[frontier, j]) || (greaterzero && data[frontier, j] == 0))
+        while frontier != 1 && (isnan(data[frontier,j]) || (greaterzero && data[frontier,j] == 0))
             frontier -= 1
         end
-        if data[frontier, j] >= 0 || (greaterzero && data[frontier, j] > 0)
-            a_sum += data[frontier, j]
+        if data[frontier,j]>=0 || (greaterzero && data[frontier,j]>0)
+            a_sum += data[frontier,j]
             cnt += 1
         end
         if !oneside
             frontier = 1
-            while frontier != x_max &&
-                (isnan(data[frontier, j]) || (greaterzero && data[frontier, j] == 0))
+            while frontier != x_max && (isnan(data[frontier,j]) || (greaterzero && data[frontier,j] == 0))
                 frontier += 1
             end
-            if data[frontier, j] >= 0 || (greaterzero && data[frontier, j] > 0)
-                a_sum += data[frontier, j]
+            if data[frontier,j]>=0 || (greaterzero && data[frontier,j]>0)
+                a_sum += data[frontier,j]
                 cnt += 1
             end
         end
         if divide
             a_sum /= cnt
         end
-        av_arr = cat(av_arr, a_sum, dims = 1)
+        av_arr = cat(av_arr,a_sum, dims=1)
     end
 
     return av_arr
 end
 
-function average_front(
-    data::Array,
-    n_gens,
-    x_max,
-    y_max;
-    greaterzero = false,
-    oneside = false,
-    divide = true,
-)
-    av_arr = Array{Float32}(undef, 0)
-    for j = 1:n_gens
+function average_front(data::Array,n_gens,x_max,y_max;greaterzero=false,oneside=false,divide=true)
+    av_arr = Array{Float32}(undef,0)
+    for j in 1:n_gens
         a_sum = 0
         cnt = 0
         # scanning every y: side 1
-        for _y = 1:y_max
+        for _y in 1:y_max
             frontier_x = x_max
-            while frontier_x != 1 && (
-                isnan(data[frontier_x, _y, j]) ||
-                (greaterzero && data[frontier_x, _y, j] == 0)
-            )
+            while frontier_x != 1 && (isnan(data[frontier_x,_y,j]) || (greaterzero && data[frontier_x,_y,j] == 0))
                 frontier_x -= 1
             end
-            if data[frontier_x, _y, j] >= 0 || (greaterzero && data[frontier_x, _y, j] > 0)
-                a_sum += data[frontier_x, _y, j]
+            if data[frontier_x,_y,j]>=0 || (greaterzero && data[frontier_x,_y,j]>0)
+                a_sum += data[frontier_x,_y,j]
                 cnt += 1
             end
         end
         # scanning every y: side 2
         if !oneside
-            for _y = 1:y_max
+            for _y in 1:y_max
                 frontier_x = 1
-                while frontier_x != x_max && (
-                    isnan(data[frontier_x, _y, j]) ||
-                    (greaterzero && data[frontier_x, _y, j] == 0)
-                )
+                while frontier_x != x_max && (isnan(data[frontier_x,_y,j]) || (greaterzero && data[frontier_x,_y,j] == 0))
                     frontier_x += 1
                 end
-                if data[frontier_x, _y, j] >= 0 ||
-                   (greaterzero && data[frontier_x, _y, j] > 0)
-                    a_sum += data[frontier_x, _y, j]
+                if data[frontier_x,_y,j]>=0 || (greaterzero && data[frontier_x,_y,j]>0)
+                    a_sum += data[frontier_x,_y,j]
                     cnt += 1
                 end
             end
@@ -2584,55 +1967,40 @@ function average_front(
             a_sum = 0
             cnt = 0
             # scanning every x: side 1
-            for _x = 1:x_max
+            for _x in 1:x_max
                 frontier_y = y_max
-                while frontier_y != 1 && (
-                    isnan(data[_x, frontier_y, j]) ||
-                    (greaterzero && data[_x, frontier_y, j] == 0)
-                )
+                while frontier_y != 1 && (isnan(data[_x,frontier_y,j]) || (greaterzero && data[_x,frontier_y,j] == 0))
                     frontier_y -= 1
                 end
-                if data[_x, frontier_y, j] >= 0 ||
-                   (greaterzero && data[_x, frontier_y, j] > 0)
-                    a_sum += data[_x, frontier_y, j]
+                if data[_x,frontier_y,j]>=0 || (greaterzero && data[_x,frontier_y,j]>0)
+                    a_sum += data[_x,frontier_y,j]
                     cnt += 1
                 end
             end
             # scanning every x: side 2
-            for _x = 1:x_max
+            for _x in 1:x_max
                 frontier_y = 1
-                while frontier_y != y_max && (
-                    isnan(data[_x, frontier_y, j]) ||
-                    (greaterzero && data[_x, frontier_y, j] == 0)
-                )
+                while frontier_y != y_max && (isnan(data[_x,frontier_y,j]) || (greaterzero && data[_x,frontier_y,j] == 0))
                     frontier_y += 1
                 end
-                if data[_x, frontier_y, j] >= 0 ||
-                   (greaterzero && data[_x, frontier_y, j] > 0)
-                    a_sum += data[_x, frontier_y, j]
+                if data[_x,frontier_y,j]>=0 || (greaterzero && data[_x,frontier_y,j]>0)
+                    a_sum += data[_x,frontier_y,j]
                     cnt += 1
                 end
             end
             if divide
-                mean_both_sides_x = a_sum / cnt
+                mean_both_sides_x = a_sum/cnt
             end
-            av_arr = cat(av_arr, (mean_both_sides_x + mean_both_sides_y) / 2, dims = 1)
+            av_arr = cat(av_arr,(mean_both_sides_x+mean_both_sides_y)/2, dims=1)
         else
-            av_arr = cat(av_arr, mean_both_sides_y, dims = 1)
+            av_arr = cat(av_arr,mean_both_sides_y, dims=1)
         end
     end
     return av_arr
 end
 
-function average_front(re, dataname; greaterzero = false, oneside = false, divide = true)
-    average_front(
-        re[dataname],
-        re["stats"]["n_gens"],
-        re["stats"]["max"]...;
-        greaterzero = greaterzero,
-        oneside = oneside,
-        divide = divide,
-    )
+function average_front(re,dataname;greaterzero=false,oneside=false,divide=true)
+    average_front(re[dataname],re["stats"]["n_gens"],re["stats"]["max"]...;greaterzero=greaterzero,oneside=oneside,divide=divide)
 end
 
 """
@@ -2650,34 +2018,29 @@ Finds the front array of `dataname` in `re`.
 
 Output: front array of the same dimensions as `re[dataname]` (space + time)
 """
-function front_array(re, dataname; oneside = false)
-    front_array(
-        re[dataname],
-        re["stats"]["n_gens"],
-        re["stats"]["max"]...;
-        oneside = oneside,
-    )
+function front_array(re,dataname;oneside=false)
+    front_array(re[dataname],re["stats"]["n_gens"],re["stats"]["max"]...;oneside=oneside)
 end
 
 # 1D
-function front_array(data, n_gens, x_max; oneside = false)
-    front_arr = fill(NaN, x_max, n_gens)
+function front_array(data,n_gens,x_max;oneside=false)
+    front_arr = fill(NaN,x_max,n_gens)
 
-    for j = 1:n_gens
+    for j in 1:n_gens
         frontier = x_max
-        while frontier != 1 && isnan(data[frontier, j])
+        while frontier != 1 && isnan(data[frontier,j])
             frontier -= 1
         end
-        if !isnan(data[frontier, j])
-            front_arr[frontier, j] = data[frontier, j]
+        if !isnan(data[frontier,j])
+            front_arr[frontier,j]=data[frontier,j]
         end
         if !oneside
             frontier = 1
-            while frontier != x_max && isnan(data[frontier, j])
+            while frontier != x_max && isnan(data[frontier,j])
                 frontier += 1
             end
-            if !isnan(data[frontier, j])
-                front_arr[frontier, j] = data[frontier, j]
+            if !isnan(data[frontier,j])
+                front_arr[frontier,j]=data[frontier,j]
             end
         end
     end
@@ -2685,51 +2048,51 @@ function front_array(data, n_gens, x_max; oneside = false)
 end
 
 # 2D
-function front_array(data::Array, n_gens, x_max, y_max; oneside = false)
-    front_arr = fill(NaN, x_max, y_max, n_gens)
-    for j = 1:n_gens
+function front_array(data::Array,n_gens,x_max,y_max;oneside=false)
+    front_arr = fill(NaN,x_max,y_max,n_gens)
+    for j in 1:n_gens
         # scanning every y: side 1
-        for _y = 1:y_max
+        for _y in 1:y_max
             frontier_x = x_max
-            while frontier_x != 1 && isnan(data[frontier_x, _y, j])
+            while frontier_x != 1 && isnan(data[frontier_x,_y,j])
                 frontier_x -= 1
             end
-            if !isnan(data[frontier_x, _y, j])
-                front_arr[frontier_x, _y, j] = data[frontier_x, _y, j]
+            if !isnan(data[frontier_x,_y,j])
+                front_arr[frontier_x,_y,j]=data[frontier_x,_y,j]
             end
         end
         # scanning every y: side 2
         if !oneside
-            for _y = 1:y_max
+            for _y in 1:y_max
                 frontier_x = 1
-                while frontier_x != x_max && isnan(data[frontier_x, _y, j])
+                while frontier_x != x_max && isnan(data[frontier_x,_y,j])
                     frontier_x += 1
                 end
-                if !isnan(data[frontier_x, _y, j])
-                    front_arr[frontier_x, _y, j] = data[frontier_x, _y, j]
+                if !isnan(data[frontier_x,_y,j])
+                    front_arr[frontier_x,_y,j]=data[frontier_x,_y,j]
                 end
             end
         end
 
         if !oneside
             # scanning every x: side 1
-            for _x = 1:x_max
+            for _x in 1:x_max
                 frontier_y = y_max
-                while frontier_y != 1 && isnan(data[_x, frontier_y, j])
+                while frontier_y != 1 && isnan(data[_x,frontier_y,j])
                     frontier_y -= 1
                 end
-                if !isnan(data[_x, frontier_y, j])
-                    front_arr[_x, frontier_y, j] = data[_x, frontier_y, j]
+                if !isnan(data[_x,frontier_y,j])
+                    front_arr[_x,frontier_y,j]=data[_x,frontier_y,j]
                 end
             end
             # scanning every x: side 2
-            for _x = 1:x_max
+            for _x in 1:x_max
                 frontier_y = 1
-                while frontier_y != y_max && isnan(data[_x, frontier_y, j])
+                while frontier_y != y_max && isnan(data[_x,frontier_y,j])
                     frontier_y += 1
                 end
-                if !isnan(data[_x, frontier_y, j] > 0)
-                    front_arr[_x, frontier_y, j] = data[_x, frontier_y, j]
+                if !isnan(data[_x,frontier_y,j]>0)
+                    front_arr[_x,frontier_y,j]=data[_x,frontier_y,j]
                 end
             end
         end
@@ -2751,20 +2114,15 @@ Normalises `dataname` in `re` using the "maximum normalisation" method: after th
 
 Output: normalised array of the same dimensions as `re[dataname]` (space + time)
 """
-function norm_maximum(re, dataname)
-    norm_maximum(
-        re[dataname],
-        re["stats"]["wlddim"] + 1,
-        re["stats"]["n_gens_burnin"],
-        re["stats"]["n_gens_exp"],
-    )
+function norm_maximum(re,dataname)
+    norm_maximum(re[dataname],re["stats"]["wlddim"]+1,re["stats"]["n_gens_burnin"],re["stats"]["n_gens_exp"])
 end
 
-function norm_maximum(data::Array, dims::Int, n_gens_burnin, n_gens_exp)
+function norm_maximum(data::Array,dims::Int,n_gens_burnin,n_gens_exp)
     normal_array = copy(data)
-    for j = 1:n_gens_exp
-        gen_max = maximum(multi_index(data, n_gens_burnin + j, dims))
-        multi_index(normal_array, n_gens_burnin + j, dims) ./= gen_max
+    for j in 1:n_gens_exp
+        gen_max = maximum(multi_index(data,n_gens_burnin+j,dims))
+        multi_index(normal_array,n_gens_burnin+j,dims) ./= gen_max
     end
     return normal_array
 end
@@ -2784,30 +2142,25 @@ Normalises `dataname` in `re` using the "maximum normalisation" method: after th
 
 Output: normalised array of the same dimensions as `re[dataname]` (space + time)
 """
-function norm_onset_mean(re::Dict, dataname::String = "fitn", offset = 0)
-    norm_onset_mean(
-        re[dataname],
-        re["stats"]["wlddim"] + 1,
-        re["stats"]["n_gens_burnin"],
-        offset,
-    )
+function norm_onset_mean(re::Dict,dataname::String="fitn",offset=0)
+    norm_onset_mean(re[dataname],re["stats"]["wlddim"]+1,re["stats"]["n_gens_burnin"],offset)
 end
 
-function norm_onset_mean(data::Array, dims::Int, n_gens_burnin::Int, offset = 0)
+function norm_onset_mean(data::Array,dims::Int,n_gens_burnin::Int,offset=0)
     normal_array = copy(data)
 
     sum = 0
     count = 0
-    for u in multi_index(data, n_gens_burnin + 1 + offset, dims)
+    for u in multi_index(data,n_gens_burnin+1+offset,dims)
         if u > 0
             sum += u
             count += 1
         end
     end
-    gen_average = sum / count
+    gen_average = sum/count
 
-    for i = (n_gens_burnin+1):length(normal_array)
-        multi_index(data, i, dims) ./= gen_average
+    for i in (n_gens_burnin+1):length(normal_array)
+        multi_index(data,i,dims) ./= gen_average
     end
     return normal_array
 end
@@ -2853,68 +2206,18 @@ end =#
 # 1D
 # ------------------------------------------------
 
-function rangeexp_1d(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    x_max_burnin = DEF_X_MAX_BURNIN,
-    x_max_exp = DEF_X_MAX_EXP,
-    migr_mode = DEF_MIGR_MODE,
-    startfill_range = NaN,
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    wld_ms1 = NaN,
-    wld_ms2 = NaN,
-    wld_stats = NaN,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    bottleneck = NaN,
-)
+function rangeexp_1d(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;x_max_burnin=DEF_X_MAX_BURNIN,x_max_exp=DEF_X_MAX_EXP,migr_mode=DEF_MIGR_MODE,startfill_range=NaN,
+    data_to_generate=DEF_DATA_TO_GENERATE,wld_ms1=NaN,wld_ms2=NaN,wld_stats=NaN,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),bottleneck=NaN)
 
-    rangeexp(
-        n_gens_burnin,
-        n_gens_exp;
-        max_burnin = (x_max_burnin,),
-        max_exp = (x_max_exp,),
-        max = (x_max_exp,),
-        startfill_range = startfill_range,
-        migr_mode = migr_mode,
-        data_to_generate = data_to_generate,
-        wld_ms1 = wld_ms1,
-        wld_ms2 = wld_ms2,
-        wld_stats = wld_stats,
-        name = name,
-        bottleneck = bottleneck,
-    )
+    rangeexp(n_gens_burnin,n_gens_exp;max_burnin=(x_max_burnin,),max_exp=(x_max_exp,),max=(x_max_exp,),startfill_range=startfill_range,
+        migr_mode=migr_mode,data_to_generate=data_to_generate,wld_ms1=wld_ms1,wld_ms2=wld_ms2,wld_stats=wld_stats,name=name,bottleneck=bottleneck)
 end
 
-function rangeexp_1d_inf(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    x_max_burnin = DEF_X_MAX_BURNIN,
-    x_max_exp = DEF_X_MAX_EXP,
-    migr_mode = DEF_MIGR_MODE,
-    startfill_range = NaN,
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    wld_ms1 = NaN,
-    wld = NaN,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    bottleneck = NaN,
-    prop_of_sel_loci = DEF_PROP_OF_SEL_LOCI,
-)
+function rangeexp_1d_inf(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;x_max_burnin=DEF_X_MAX_BURNIN,x_max_exp=DEF_X_MAX_EXP,migr_mode=DEF_MIGR_MODE,startfill_range=NaN,
+    data_to_generate=DEF_DATA_TO_GENERATE,wld_ms1=NaN,wld=NaN,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),bottleneck=NaN,prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI)
 
-    rangeexp_inf(
-        n_gens_burnin,
-        n_gens_exp;
-        max_burnin = (x_max_burnin,),
-        max_exp = (x_max_exp,),
-        max = (x_max_exp,),
-        startfill_range = startfill_range,
-        migr_mode = migr_mode,
-        data_to_generate = data_to_generate,
-        wld = wld,
-        wld_stats = wld_stats,
-        name = name,
-        bottleneck = bottleneck,
-        prop_of_sel_loci = prop_of_sel_loci,
-    )
+    rangeexp_inf(n_gens_burnin,n_gens_exp;max_burnin=(x_max_burnin,),max_exp=(x_max_exp,),max=(x_max_exp,),startfill_range=startfill_range,
+        migr_mode=migr_mode,data_to_generate=data_to_generate,wld=wld,wld_stats=wld_stats,name=name,bottleneck=bottleneck,prop_of_sel_loci=prop_of_sel_loci)
 end
 
 
@@ -2980,40 +2283,12 @@ Output: a Dict containing data after the expansion:
 - **stats** - statistics array containing world and range expansion information
 - **fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
-function rangeexp_strip(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    x_max_burnin = DEF_X_MAX_BURNIN,
-    x_max_exp = DEF_X_MAX_EXP,
-    y_max = DEF_Y_MAX,
-    migr_mode = DEF_MIGR_MODE,
-    startfill_range = NaN,
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    bottleneck = ("midhole at x=", x_max_burnin * 2),
-    wld_ms1 = NaN,
-    wld_ms2 = NaN,
-    wld_stats = NaN,
-    max_burnin = (x_max_burnin, y_max),
-    max_exp = (x_max_exp, y_max),
-    max = (x_max_exp, y_max),
-)
+function rangeexp_strip(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;x_max_burnin=DEF_X_MAX_BURNIN,x_max_exp=DEF_X_MAX_EXP,y_max=DEF_Y_MAX,migr_mode=DEF_MIGR_MODE,startfill_range=NaN,
+    data_to_generate=DEF_DATA_TO_GENERATE,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),bottleneck=("midhole at x=",x_max_burnin*2),
+    wld_ms1=NaN,wld_ms2=NaN,wld_stats=NaN,max_burnin=(x_max_burnin,y_max),max_exp=(x_max_exp,y_max),max=(x_max_exp,y_max))
 
-    rangeexp(
-        n_gens_burnin,
-        n_gens_exp;
-        max_burnin = max_burnin,
-        max_exp = max_exp,
-        max = max,
-        startfill_range = startfill_range,
-        migr_mode = migr_mode,
-        data_to_generate = data_to_generate,
-        wld_ms1 = wld_ms1,
-        wld_ms2 = wld_ms2,
-        wld_stats = wld_stats,
-        name = name,
-        bottleneck = bottleneck,
-    )
+    rangeexp(n_gens_burnin,n_gens_exp;max_burnin=max_burnin,max_exp=max_exp,max=max,startfill_range=startfill_range,
+        migr_mode=migr_mode,data_to_generate=data_to_generate,wld_ms1=wld_ms1,wld_ms2=wld_ms2,wld_stats=wld_stats,name=name,bottleneck=bottleneck)
 end
 
 """
@@ -3057,408 +2332,166 @@ If starting from existing world, also provide:
 
 
 """
-function rangeexp_strip_inf(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    x_max_burnin = DEF_X_MAX_BURNIN,
-    x_max_exp = DEF_X_MAX_EXP,
-    y_max = DEF_Y_MAX,
-    migr_mode = DEF_MIGR_MODE,
-    startfill_range = NaN,
-    max_burnin = (x_max_burnin, y_max),
-    max_exp = (x_max_exp, y_max),
-    max = (x_max_exp, y_max),
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    wld = NaN,
-    wld_stats = NaN,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    bottleneck = ("midhole at x=", x_max_burnin * 2),
-    prop_of_sel_loci = DEF_PROP_OF_SEL_LOCI,
-)
+function rangeexp_strip_inf(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;x_max_burnin=DEF_X_MAX_BURNIN,x_max_exp=DEF_X_MAX_EXP,y_max=DEF_Y_MAX,migr_mode=DEF_MIGR_MODE,startfill_range=NaN,
+    max_burnin=(x_max_burnin,y_max),max_exp=(x_max_exp,y_max),max=(x_max_exp,y_max),
+    data_to_generate=DEF_DATA_TO_GENERATE,wld=NaN,wld_stats=NaN,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),bottleneck=("midhole at x=",x_max_burnin*2),prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI)
 
-    rangeexp_inf(
-        n_gens_burnin,
-        n_gens_exp;
-        max_burnin = max_burnin,
-        max_exp = max_exp,
-        max = max,
-        startfill_range = startfill_range,
-        migr_mode = migr_mode,
-        data_to_generate = data_to_generate,
-        wld = wld,
-        wld_stats = wld_stats,
-        name = name,
-        prop_of_sel_loci = prop_of_sel_loci,
-        bottleneck = bottleneck,
-    )
+    rangeexp_inf(n_gens_burnin,n_gens_exp;max_burnin=max_burnin,max_exp=max_exp,max=max,startfill_range=startfill_range,
+        migr_mode=migr_mode,data_to_generate=data_to_generate,wld=wld,wld_stats=wld_stats,name=name,prop_of_sel_loci=prop_of_sel_loci,bottleneck=bottleneck)
 end
 
-function rangeexp_disk(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    r_max_burnin = DEF_R_MAX_BURNIN,
-    r_max_exp = DEF_R_MAX_EXP,
-    migr_mode = DEF_MIGR_MODE,
-    max = (r_max_exp * 2 + 1, r_max_exp * 2 + 1),
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    wld_ms1 = NaN,
-    wld_ms2 = NaN,
-    wld_stats = NaN,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    bottleneck = NaN,
-    max_exp = NaN,
-    max_burnin = NaN,
-    startfill_range = NaN,
-)
+function rangeexp_disk(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;r_max_burnin=DEF_R_MAX_BURNIN,r_max_exp=DEF_R_MAX_EXP,migr_mode=DEF_MIGR_MODE,max=(r_max_exp*2+1,r_max_exp*2+1),
+    data_to_generate=DEF_DATA_TO_GENERATE,wld_ms1=NaN,wld_ms2=NaN,wld_stats=NaN,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),bottleneck=NaN,max_exp=NaN,max_burnin=NaN,startfill_range=NaN)
 
-    if !isa(startfill_range, Array)
-        ran = ins_sq(r_max_burnin, r_max_exp)
-        startfill_range = [ran, ran]
+    if !isa(startfill_range,Array)
+        ran = ins_sq(r_max_burnin,r_max_exp)
+        startfill_range = [ran,ran]
     end
 
-    rangeexp(
-        n_gens_burnin,
-        n_gens_exp;
-        r_max_burnin = r_max_burnin,
-        r_max_exp = r_max_exp,
-        max_burnin = max_burnin,
-        max_exp = max_exp,
-        max = max,
-        startfill_range = startfill_range,
-        migr_mode = migr_mode,
-        data_to_generate = data_to_generate,
-        wld_ms1 = wld_ms1,
-        wld_ms2 = wld_ms2,
-        wld_stats = wld_stats,
-        name = name,
-        bottleneck = bottleneck,
-    )
+    rangeexp(n_gens_burnin,n_gens_exp;r_max_burnin=r_max_burnin,r_max_exp=r_max_exp,max_burnin=max_burnin,max_exp=max_exp,max=max,startfill_range=startfill_range,
+        migr_mode=migr_mode,data_to_generate=data_to_generate,wld_ms1=wld_ms1,wld_ms2=wld_ms2,wld_stats=wld_stats,name=name,bottleneck=bottleneck)
 end
 
-function rangeexp_disk_inf(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    r_max_burnin = DEF_R_MAX_BURNIN,
-    r_max_exp = DEF_R_MAX_EXP,
-    migr_mode = DEF_MIGR_MODE,
-    max = (r_max_exp * 2 + 1, r_max_exp * 2 + 1),
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    wld = NaN,
-    wld_stats = NaN,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    bottleneck = NaN,
-    max_exp = NaN,
-    max_burnin = NaN,
-    startfill_range = NaN,
-)
+function rangeexp_disk_inf(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;r_max_burnin=DEF_R_MAX_BURNIN,r_max_exp=DEF_R_MAX_EXP,migr_mode=DEF_MIGR_MODE,max=(r_max_exp*2+1,r_max_exp*2+1),
+    data_to_generate=DEF_DATA_TO_GENERATE,wld=NaN,wld_stats=NaN,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),bottleneck=NaN,max_exp=NaN,max_burnin=NaN,startfill_range=NaN)
 
-    if !isa(startfill_range, Array)
-        ran = ins_sq(r_max_burnin, r_max_exp)
-        startfill_range = [ran, ran]
+    if !isa(startfill_range,Array)
+        ran = ins_sq(r_max_burnin,r_max_exp)
+        startfill_range = [ran,ran]
     end
 
-    rangeexp_inf(
-        n_gens_burnin,
-        n_gens_exp;
-        r_max_burnin = r_max_burnin,
-        r_max_exp = r_max_exp,
-        max_burnin = max_burnin,
-        max_exp = max_exp,
-        max = max,
-        startfill_range = startfill_range,
-        migr_mode = migr_mode,
-        data_to_generate = data_to_generate,
-        wld = wld,
-        wld_stats = wld_stats,
-        name = name,
-        bottleneck = bottleneck,
-    )
+    rangeexp_inf(n_gens_burnin,n_gens_exp;r_max_burnin=r_max_burnin,r_max_exp=r_max_exp,max_burnin=max_burnin,max_exp=max_exp,max=max,startfill_range=startfill_range,
+        migr_mode=migr_mode,data_to_generate=data_to_generate,wld=wld,wld_stats=wld_stats,name=name,bottleneck=bottleneck)
 end
 
 
 # 3D
 # ------------------------------------------------
 
-function rangeexp_cylinder(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    r_max_burnin = DEF_R_MAX_BURNIN,
-    r_max_exp = DEF_R_MAX_EXP,
-    migr_mode = DEF_MIGR_MODE,
-    startfill_range = NaN,
-    z_max_burnin = DEF_X_MAX_BURNIN,
-    z_max_exp = DEF_X_MAX_EXP,
-    max_burnin = (NaN, NaN, z_max_burnin),
-    max_exp = (NaN, NaN, z_max_exp),
-    max = (r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp),
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    wld_ms1 = NaN,
-    wld_ms2 = NaN,
-    wld_stats = NaN,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    bottleneck = NaN,
-)
+function rangeexp_cylinder(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;r_max_burnin=DEF_R_MAX_BURNIN,r_max_exp=DEF_R_MAX_EXP,migr_mode=DEF_MIGR_MODE,startfill_range=NaN,
+    z_max_burnin=DEF_X_MAX_BURNIN,z_max_exp=DEF_X_MAX_EXP,max_burnin=(NaN,NaN,z_max_burnin),max_exp=(NaN,NaN,z_max_exp),max=(r_max_exp*2+1,r_max_exp*2+1,z_max_exp),
+    data_to_generate=DEF_DATA_TO_GENERATE,wld_ms1=NaN,wld_ms2=NaN,wld_stats=NaN,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),bottleneck=NaN)
 
-    if !isa(startfill_range, Array)
-        ran = ins_sq(r_max_burnin, r_max_exp)
-        startfill_range = [ran, ran, 1:z_max_burnin]
+    if !isa(startfill_range,Array)
+        ran = ins_sq(r_max_burnin,r_max_exp)
+        startfill_range = [ran,ran,1:z_max_burnin]
     end
 
-    rangeexp(
-        n_gens_burnin,
-        n_gens_exp;
-        r_max_burnin = r_max_burnin,
-        r_max_exp = r_max_exp,
-        max_burnin = max_burnin,
-        max_exp = max_exp,
-        max = max,
-        migr_mode = migr_mode,
-        data_to_generate = data_to_generate,
-        wld_ms1 = wld_ms1,
-        wld_ms2 = wld_ms2,
-        wld_stats = wld_stats,
-        name = name,
-        bottleneck = bottleneck,
-        startfill_range = startfill_range,
-    )
+    rangeexp(n_gens_burnin,n_gens_exp;r_max_burnin=r_max_burnin,r_max_exp=r_max_exp,max_burnin=max_burnin,max_exp=max_exp,max=max,
+        migr_mode=migr_mode,data_to_generate=data_to_generate,wld_ms1=wld_ms1,wld_ms2=wld_ms2,wld_stats=wld_stats,name=name,bottleneck=bottleneck,
+        startfill_range=startfill_range)
 end
 
-function rangeexp_cylinder_inf(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    r_max_burnin = DEF_R_MAX_BURNIN,
-    r_max_exp = DEF_R_MAX_EXP,
-    migr_mode = DEF_MIGR_MODE,
-    startfill_range = NaN,
-    z_max_burnin = DEF_X_MAX_BURNIN,
-    z_max_exp = DEF_X_MAX_EXP,
-    prop_of_sel_loci = DEF_PROP_OF_SEL_LOCI,
-    max_burnin = (NaN, NaN, z_max_burnin),
-    max_exp = (NaN, NaN, z_max_exp),
-    max = (r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp),
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    wld = NaN,
-    wld_stats = NaN,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    bottleneck = NaN,
-)
+function rangeexp_cylinder_inf(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;r_max_burnin=DEF_R_MAX_BURNIN,r_max_exp=DEF_R_MAX_EXP,migr_mode=DEF_MIGR_MODE,startfill_range=NaN,
+    z_max_burnin=DEF_X_MAX_BURNIN,z_max_exp=DEF_X_MAX_EXP,prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI,max_burnin=(NaN,NaN,z_max_burnin),max_exp=(NaN,NaN,z_max_exp),max=(r_max_exp*2+1,r_max_exp*2+1,z_max_exp),
+    data_to_generate=DEF_DATA_TO_GENERATE,wld=NaN,wld_stats=NaN,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),bottleneck=NaN)
 
-    if !isa(startfill_range, Array)
-        ran = ins_sq(r_max_burnin, r_max_exp)
-        startfill_range = [ran, ran, 1:z_max_burnin]
+    if !isa(startfill_range,Array)
+        ran = ins_sq(r_max_burnin,r_max_exp)
+        startfill_range = [ran,ran,1:z_max_burnin]
     end
 
-    rangeexp_inf(
-        n_gens_burnin,
-        n_gens_exp;
-        r_max_burnin = r_max_burnin,
-        r_max_exp = r_max_exp,
-        max_burnin = max_burnin,
-        max_exp = max_exp,
-        max = max,
-        migr_mode = migr_mode,
-        data_to_generate = data_to_generate,
-        wld = wld,
-        wld_stats = wld_stats,
-        name = name,
-        prop_of_sel_loci = DEF_PROP_OF_SEL_LOCI,
-        bottleneck = bottleneck,
-        startfill_range = startfill_range,
-    )
+    rangeexp_inf(n_gens_burnin,n_gens_exp;r_max_burnin=r_max_burnin,r_max_exp=r_max_exp,max_burnin=max_burnin,max_exp=max_exp,max=max,
+        migr_mode=migr_mode,data_to_generate=data_to_generate,wld=wld,wld_stats=wld_stats,name=name,prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI,bottleneck=bottleneck,
+        startfill_range=startfill_range)
 end
 
-function rangeexp_sphere(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    r_max_burnin = DEF_R_MAX_BURNIN,
-    r_max_exp = DEF_R_MAX_EXP,
-    migr_mode = DEF_MIGR_MODE,
-    startfill_range = NaN,
-    max_burnin = NaN,
-    max_exp = NaN,
-    max = (r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1),
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    wld_ms1 = NaN,
-    wld_ms2 = NaN,
-    wld_stats = NaN,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    bottleneck = NaN,
-)
+function rangeexp_sphere(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;r_max_burnin=DEF_R_MAX_BURNIN,r_max_exp=DEF_R_MAX_EXP,migr_mode=DEF_MIGR_MODE,startfill_range=NaN,
+    max_burnin=NaN,max_exp=NaN,max=(r_max_exp*2+1,r_max_exp*2+1,r_max_exp*2+1),
+    data_to_generate=DEF_DATA_TO_GENERATE,wld_ms1=NaN,wld_ms2=NaN,wld_stats=NaN,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),bottleneck=NaN)
 
-    if !isa(startfill_range, Array)
-        ran = ins_cb(r_max_burnin, r_max_exp)
-        startfill_range = [ran, ran, ran]
+    if !isa(startfill_range,Array)
+        ran = ins_cb(r_max_burnin,r_max_exp)
+        startfill_range = [ran,ran,ran]
     end
 
-    rangeexp(
-        n_gens_burnin,
-        n_gens_exp;
-        r_max_burnin = r_max_burnin,
-        r_max_exp = r_max_exp,
-        max_burnin = max_burnin,
-        max_exp = max_exp,
-        max = max,
-        r_coords = [1, 2, 3],
-        migr_mode = migr_mode,
-        data_to_generate = data_to_generate,
-        wld_ms1 = wld_ms1,
-        wld_ms2 = wld_ms2,
-        wld_stats = wld_stats,
-        name = name,
-        bottleneck = bottleneck,
-        startfill_range = startfill_range,
-    )
+    rangeexp(n_gens_burnin,n_gens_exp;r_max_burnin=r_max_burnin,r_max_exp=r_max_exp,max_burnin=max_burnin,max_exp=max_exp,max=max,r_coords=[1,2,3],
+        migr_mode=migr_mode,data_to_generate=data_to_generate,wld_ms1=wld_ms1,wld_ms2=wld_ms2,wld_stats=wld_stats,name=name,bottleneck=bottleneck,
+        startfill_range=startfill_range)
 end
 
-function rangeexp_sphere_inf(
-    n_gens_burnin = DEF_N_GENS_BURNIN,
-    n_gens_exp = DEF_N_GENS_EXP;
-    r_max_burnin = DEF_R_MAX_BURNIN,
-    r_max_exp = DEF_R_MAX_EXP,
-    migr_mode = DEF_MIGR_MODE,
-    startfill_range = NaN,
-    max_burnin = NaN,
-    max_exp = NaN,
-    max = (r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1),
-    prop_of_sel_loci = DEF_PROP_OF_SEL_LOCI,
-    data_to_generate = DEF_DATA_TO_GENERATE,
-    wld = NaN,
-    wld_stats = NaN,
-    name = Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    bottleneck = NaN,
-)
+function rangeexp_sphere_inf(n_gens_burnin=DEF_N_GENS_BURNIN,n_gens_exp=DEF_N_GENS_EXP;r_max_burnin=DEF_R_MAX_BURNIN,r_max_exp=DEF_R_MAX_EXP,migr_mode=DEF_MIGR_MODE,startfill_range=NaN,
+    max_burnin=NaN,max_exp=NaN,max=(r_max_exp*2+1,r_max_exp*2+1,r_max_exp*2+1),prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI,
+    data_to_generate=DEF_DATA_TO_GENERATE,wld=NaN,wld_stats=NaN,name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),bottleneck=NaN)
 
-    if !isa(startfill_range, Array)
-        ran = ins_cb(r_max_burnin, r_max_exp)
-        startfill_range = [ran, ran, ran]
+    if !isa(startfill_range,Array)
+        ran = ins_cb(r_max_burnin,r_max_exp)
+        startfill_range = [ran,ran,ran]
     end
 
-    rangeexp_inf(
-        n_gens_burnin,
-        n_gens_exp;
-        r_max_burnin = r_max_burnin,
-        r_max_exp = r_max_exp,
-        max_burnin = max_burnin,
-        max_exp = max_exp,
-        max = max,
-        r_coords = [1, 2, 3],
-        migr_mode = migr_mode,
-        data_to_generate = data_to_generate,
-        wld = wld,
-        wld_stats = wld_stats,
-        name = name,
-        bottleneck = bottleneck,
-        prop_of_sel_loci = prop_of_sel_loci,
-        startfill_range = startfill_range,
-    )
+    rangeexp_inf(n_gens_burnin,n_gens_exp;r_max_burnin=r_max_burnin,r_max_exp=r_max_exp,max_burnin=max_burnin,max_exp=max_exp,max=max,r_coords=[1,2,3],
+        migr_mode=migr_mode,data_to_generate=data_to_generate,wld=wld,wld_stats=wld_stats,name=name,bottleneck=bottleneck,prop_of_sel_loci=prop_of_sel_loci,
+        startfill_range=startfill_range)
 end
 
 # Upcoming features
 # ------------------------------------------------
 
-vc(x) = cat(eachslice(x, dims = 4)..., dims = 2)
+vc(x) = cat(eachslice(x, dims=4)...,dims=2)
 
-function re_get_avrel(data::Array, x, gen, denom)
+function re_get_avrel(data::Array,x,gen,denom)
     nd = ndims(data)
-    if nd == 4
-        return mean(vc(data)[x, :, gen]) / denom
-    elseif nd == 3
-        return mean(data[x, :, gen]) / denom
+    if nd==4
+        return mean(vc(data)[x,:,gen])/denom
+    elseif nd==3
+        return mean(data[x,:,gen])/denom
     else
         println("Wrong data type.")
     end
 end
-function re_get_avrel(
-    re::Dict,
-    dataname::String,
-    x,
-    gen = Int(re["stats"]["n_gens"]);
-    sel = true,
-)
-    denom =
-        sel ? re["stats"]["n_sel_loci"] : re["stats"]["n_loci"] - re["stats"]["n_sel_loci"]
-    return re_get_avrel(re[dataname], x, gen, denom)
+function re_get_avrel(re::Dict,dataname::String,x,gen=Int(re["stats"]["n_gens"]);sel=true)
+    denom = sel ? re["stats"]["n_sel_loci"] : re["stats"]["n_loci"]-re["stats"]["n_sel_loci"]
+    return re_get_avrel(re[dataname],x,gen,denom)
 end
-function re_get_avrelAAsel(re::Dict, x, gen = re["stats"]["n_gens"])
-    return re_get_avrel(re, "AAsel", x, gen; sel = true)
+function re_get_avrelAAsel(re::Dict,x,gen=re["stats"]["n_gens"])
+    return re_get_avrel(re,"AAsel",x,gen;sel=true)
 end
-function re_get_avrelAasel(re::Dict, x, gen = re["stats"]["n_gens"])
-    return re_get_avrel(re, "Aasel", x, gen; sel = true)
+function re_get_avrelAasel(re::Dict,x,gen=re["stats"]["n_gens"])
+    return re_get_avrel(re,"Aasel",x,gen;sel=true)
 end
-function re_get_avrelaasel(re::Dict, x, gen = re["stats"]["n_gens"])
-    return re_get_avrel(re, "aasel", x, gen; sel = true)
+function re_get_avrelaasel(re::Dict,x,gen=re["stats"]["n_gens"])
+    return re_get_avrel(re,"aasel",x,gen;sel=true)
 end
-function re_get_avrelAAneu(re::Dict, x, gen = re["stats"]["n_gens"])
-    return re_get_avrel(re, "AAneu", x, gen; sel = false)
+function re_get_avrelAAneu(re::Dict,x,gen=re["stats"]["n_gens"])
+    return re_get_avrel(re,"AAneu",x,gen;sel=false)
 end
-function re_get_avrelAaneu(re::Dict, x, gen = re["stats"]["n_gens"])
-    return re_get_avrel(re, "Aaneu", x, gen; sel = false)
+function re_get_avrelAaneu(re::Dict,x,gen=re["stats"]["n_gens"])
+    return re_get_avrel(re,"Aaneu",x,gen;sel=false)
 end
-function re_get_avrelaaneu(re::Dict, x, gen = re["stats"]["n_gens"])
-    return re_get_avrel(re, "aaneu", x, gen; sel = false)
+function re_get_avrelaaneu(re::Dict,x,gen=re["stats"]["n_gens"])
+    return re_get_avrel(re,"aaneu",x,gen;sel=false)
 end
 
-function re_plot_avrelselneu(
-    re::Dict,
-    dataname::String,
-    x_range = (1:Int(re["stats"]["x_max"]));
-    x_scale_factor = 1,
-    sel = true,
-    overlay = false,
-)
+function re_plot_avrelselneu(re::Dict,dataname::String,x_range=(1:Int(re["stats"]["x_max"]));x_scale_factor=1,sel=true,overlay=false)
     nd = ndims(re[dataname*"sel"])
-    if nd == 4
+    if nd==4
         data1 = vc(re[dataname*"sel"])
         data2 = vc(re[dataname*"neu"])
     else
         data1 = re[dataname*"sel"]
         data2 = re[dataname*"neu"]
     end
-    t = [
-        re_get_avrel(data1, j, Int(re["stats"]["n_gens"]), re["stats"]["n_sel_loci"])
-        for j in x_range
-    ]
-    t2 = [
-        re_get_avrel(
-            data2,
-            j,
-            Int(re["stats"]["n_gens"]),
-            re["stats"]["n_loci"] - re["stats"]["n_sel_loci"],
-        ) for j in x_range
-    ]
+    t = [re_get_avrel(data1,j,Int(re["stats"]["n_gens"]),re["stats"]["n_sel_loci"]) for j in x_range]
+    t2 = [re_get_avrel(data2,j,Int(re["stats"]["n_gens"]),re["stats"]["n_loci"]-re["stats"]["n_sel_loci"]) for j in x_range]
 
-    if haskey(re["stats"], "name")
-        lbl1 = re["stats"]["name"] * "[selected $dataname]"
-        lbl2 = re["stats"]["name"] * "[neutral $dataname]"
+    if haskey(re["stats"],"name")
+        lbl1 = re["stats"]["name"]*"[selected $dataname]"
+        lbl2 = re["stats"]["name"]*"[neutral $dataname]"
     else
         lbl1 = "selected $dataname"
         lbl2 = "neutral $dataname"
     end
 
     if overlay
-        plot!(x_range * x_scale_factor, t, label = lbl1, xlabel = "x")
+        plot!(x_range*x_scale_factor,t,label=lbl1,xlabel="x")
     else
-        plot(x_range * x_scale_factor, t, label = lbl1, xlabel = "x")
+        plot(x_range*x_scale_factor,t,label=lbl1,xlabel="x")
     end
     #plot!(x_range*x_scale_factor,t2,label=lbl2)
 end
 
-function re_plot_avrelselneu!(
-    re::Dict,
-    dataname::String,
-    x_range = (1:Int(re["stats"]["x_max"]));
-    x_scale_factor = 1,
-    sel = true,
-    overlay = false,
-)
-    re_plot_avrelselneu(
-        re,
-        dataname,
-        x_range;
-        x_scale_factor = x_scale_factor,
-        sel = sel,
-        overlay = true,
-    )
+function re_plot_avrelselneu!(re::Dict,dataname::String,x_range=(1:Int(re["stats"]["x_max"]));x_scale_factor=1,sel=true,overlay=false)
+    re_plot_avrelselneu(re,dataname,x_range;x_scale_factor=x_scale_factor,sel=sel,overlay=true)
 end
 
 # ------------------------------------------------
