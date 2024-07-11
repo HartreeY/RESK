@@ -1,4 +1,4 @@
-using StatsBase, Distributions, Distributed, Random, Plots, SpecialFunctions, Serialization, Dates, GLMakie
+using StatsBase, Distributions, Distributed, Random, Plots, SpecialFunctions, Serialization, Dates, GLMakie, SharedArrays
 include("consts.jl")
 
 # Configuration
@@ -776,6 +776,13 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
     muts_Aaneu_wld = NaN
     muts_aaneu_wld = NaN
 
+#=     if n_procs>1
+        procs = addprocs(n_procs)
+        for k in 1:length(procs)
+            @spawnat procs[k] include("../resk.jl")
+        end
+    end =#
+    
     if !(wld_ms1 isa Array{Array{Array{Bool}}})
         #println("No world provided. Creating a new world.")
         wld_ms1, wld_ms2, wld_stats = create_empty_world(max; name=name)
@@ -802,11 +809,11 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
     neu_out = false
     if occursin("F", data_to_generate)
         fitn_out = true
-        fitn_wld = Array{Float32}(undef, wld_stats["max"]..., n_gens_total, n_re)
+        fitn_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens_total, n_re)
     end
     if occursin("P", data_to_generate)
         pops_out = true
-        pops_wld = Array{Float32}(undef, wld_stats["max"]..., n_gens_total, n_re)
+        pops_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens_total, n_re)
     end
     if occursin("S", data_to_generate)
         sel_out = true
@@ -822,39 +829,43 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
     end
 
 
-    if distributed
+    if distributed #n_procs>1
+        
         @sync begin
-            for j in workers()
-                @spawnat j for g in 1:n_gens_total
-                    if g <= n_gens_burnin
-                        max_migr = max_burnin
-                        r_max_migr = r_max_burnin
-                    else
-                        max_migr = max_exp
-                        r_max_migr = r_max_exp
-                    end
-                    wld_ms1[j], wld_ms2[j], fitn_next, pops_next, muts_AAsel_next, muts_Aasel_next, muts_aasel_next, muts_AAneu_next,
-                    muts_Aaneu_next, muts_aaneu_next = build_next_gen(wld_ms1[j], wld_ms2[j], wld_stats, fitn_out, pops_out, sel_out, neu_out;
-                        max_migr=max_migr, migr_mode=migr_mode, bottleneck=bottleneck, r_max_migr=r_max_migr, r_coords=r_coords)
-                    if occursin("F", data_to_generate)
-                        fitn_wld[repeat([:], wlddim)..., g, j] = fitn_next
-                    end
-                    if occursin("P", data_to_generate)
-                        pops_wld[repeat([:], wlddim)..., g, j] = pops_next
-                    end
-                    if occursin("S", data_to_generate)
-                        muts_AAsel_wld = cat(muts_AAsel_wld, muts_AAsel_next, dims=wlddim + 1)
-                        muts_Aasel_wld = cat(muts_Aasel_wld, muts_Aasel_next, dims=wlddim + 1)
-                        muts_aasel_wld = cat(muts_aasel_wld, muts_aasel_next, dims=wlddim + 1)
-                    end
-                    if occursin("N", data_to_generate)
-                        muts_AAneu_wld = cat(muts_AAneu_wld, muts_AAneu_next, dims=wlddim + 1)
-                        muts_Aaneu_wld = cat(muts_Aaneu_wld, muts_Aaneu_next, dims=wlddim + 1)
-                        muts_aaneu_wld = cat(muts_aaneu_wld, muts_aaneu_next, dims=wlddim + 1)
+            @inbounds for j in 1:n_re
+                @spawn begin
+                    for g in 1:n_gens_total
+                        if g <= n_gens_burnin
+                            max_migr = max_burnin
+                            r_max_migr = r_max_burnin
+                        else
+                            max_migr = max_exp
+                            r_max_migr = r_max_exp
+                        end
+                        wld_ms1[j], wld_ms2[j], fitn_next, pops_next, muts_AAsel_next, muts_Aasel_next, muts_aasel_next, muts_AAneu_next,
+                        muts_Aaneu_next, muts_aaneu_next = build_next_gen(wld_ms1[j], wld_ms2[j], wld_stats, fitn_out, pops_out, sel_out, neu_out;
+                            max_migr=max_migr, migr_mode=migr_mode, bottleneck=bottleneck, r_max_migr=r_max_migr, r_coords=r_coords)
+                        if fitn_out
+                            fitn_wld[repeat([:],wlddim)...,g,j] = fitn_next
+                        end
+                        if pops_out
+                            pops_wld[repeat([:],wlddim)...,g,j] = pops_next
+                        end
+                        if occursin("S", data_to_generate)
+                            muts_AAsel_wld = cat(muts_AAsel_wld, muts_AAsel_next, dims=wlddim + 1)
+                            muts_Aasel_wld = cat(muts_Aasel_wld, muts_Aasel_next, dims=wlddim + 1)
+                            muts_aasel_wld = cat(muts_aasel_wld, muts_aasel_next, dims=wlddim + 1)
+                        end
+                        if occursin("N", data_to_generate)
+                            muts_AAneu_wld = cat(muts_AAneu_wld, muts_AAneu_next, dims=wlddim + 1)
+                            muts_Aaneu_wld = cat(muts_Aaneu_wld, muts_Aaneu_next, dims=wlddim + 1)
+                            muts_aaneu_wld = cat(muts_aaneu_wld, muts_aaneu_next, dims=wlddim + 1)
+                        end
                     end
                 end
             end
         end
+        #rmprocs(n_procs)
     else
         @inbounds for j in 1:n_re, g in 1:n_gens_total
             if g <= n_gens_burnin
