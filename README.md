@@ -83,9 +83,9 @@ Builds the next generation in finite-sites expansions, i.e. advances two world a
 `neu_out`: if **true**, the new generation data for neutral mutations will be output \
 `max_migr`: a tuple of maximum migration area coordinates \
 `migr_mode`: mode of migration. Possible values: \
-> **ort** - orthogonal directions only \
-> **all** - orthogonal and diagonal \
-**hex** - hexagonal grid \
+&nbsp;&nbsp;&nbsp;**ort** - orthogonal directions only \
+&nbsp;&nbsp;&nbsp;**all** - orthogonal and diagonal \
+&nbsp;&nbsp;&nbsp;**hex** - hexagonal grid \
 **diag1/2** - orthogonal and half-weighted diagonal \
 **buffon1** - equidistant Buffon-Laplace (see documentation) \
 **buffon2** - uniform Buffon-Laplace \
