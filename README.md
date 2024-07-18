@@ -2,22 +2,22 @@
 A set of programs in Julia designed to efficiently simulate range expansions and study their population dynamics.
 This set of programs has been used in the study "The evolution of fitness during range expansions in multiple dimensions". You can find the preprint at [[https://www.biorxiv.org/content/10.1101/2023.12.29.573608v2]].
 
-# How to use
-## Prerequisites
+## How to use
+### Prerequisites
 To begin using this set of tools, you need to have Julia 1.9+ installed, along with the required packages. To install the packages, please run the initialisation script: access the *programs* folder and run the script *init.jl*. This should only take a couple of minutes.
 
 Once you have the required packages, you can use the documented methods of this package on your own, or you can follow one of several examples in the *programs/examples* folder.
 
-## Main use cases
+### Main use cases
 Include the *resk.jl* script and use its methods.
 
-To run a simulation once, use `rangeexp` or the methods that start with `rangeexp`:
+To simulate a range expansion once, use `rangeexp` or the methods that start with `rangeexp`:
 
 - 1D: `rangeexp_1d`
 - 2D: `rangeexp_disk`,`rangeexp_strip`
 - 3D: `rangeexp_cylinder`,`rangeexp_sphere`.
 
-If no `wld` argument is provided, a world (= deme space) will be created, and the expansion will be run on it.
+Running this with default options, a world (= habitat) will be created, seeded with individuals, and the expansion will be run on it.
 
 The `rangeexp` functions output a fixed dictionary that includes metadata (**stats**) and expansion data. The types of expansion data within it are determined by the *data_to_generate* argument. It can take on the following values:
 - **F** - **fitn** (deme-average fitness)
@@ -49,9 +49,9 @@ re_heatmap_AAsel(test; log_factor=1.02)
 will output the average number of selected homozygous mutant loci in a deme:
 ![alt text](https://github.com/HartreeY/RESK/blob/main/animations/readme0.gif?raw=true)
 
-Here's an example of a longer axial simulation in 2D:
+Here's an example of a deme-average fitness heatmap of a longer axial simulation in 2D:
 ```
-test = rangeexp_strip_inf(100,1000;data_to_generate="FPSN",prop_of_sel_loci=0.8,y_max=8,migr_mode="diag1/2")
+test = rangeexp_strip(100,1000;data_to_generate="FPSN",prop_of_sel_loci=0.8,y_max=8,migr_mode="diag1/2")
 ```
 ![alt text](https://github.com/HartreeY/RESK/blob/main/animations/readme1.gif?raw=true)
 
@@ -65,9 +65,9 @@ The above examples use the finite-sites model for individual genomes. For every 
 
 ![alt text](https://github.com/HartreeY/RESK/blob/main/animations/readme3.gif?raw=true)
 
-## Main methods
+### Main methods
 
-### create_empty_world(max=(DEF_X_MAX, DEF_Y_MAX); min=(1, 1), name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), k_capacity=DEF_K_CAPACITY, r_prolif_rate=DEF_R_PROLIF_RATE, n_loci=DEF_N_LOCI, n_sel_loci=DEF_N_SEL_LOCI,  mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, s_sel_coef=DEF_S_SEL_COEF, h_domin_coef=DEF_H_DOMIN_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS)
+**create_empty_world(max=(DEF_X_MAX, DEF_Y_MAX); min=(1, 1), name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), k_capacity=DEF_K_CAPACITY, r_prolif_rate=DEF_R_PROLIF_RATE, n_loci=DEF_N_LOCI, n_sel_loci=DEF_N_SEL_LOCI,  mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, s_sel_coef=DEF_S_SEL_COEF, h_domin_coef=DEF_H_DOMIN_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS)**
 
 Builds the next generation in finite-sites expansions, i.e. advances two world arrays (left and right monosomes) by one generation and returns the new generation data for fitness, populations, mutation numbers.
 
