@@ -95,7 +95,8 @@ Builds the next generation in finite-sites expansions, i.e. advances two world a
 `r_max_migr`: Int maximum migration radius. If **>0**, migration is kept within this radius. Can be used in addition to `max_migr` \
 `r_coords`: a tuple (array) of axes' ordinal numbers that the n-sphere with `r_max_migr` covers. For example: \
 **(1,3)** - migration is bound within a disk at x and z axes \
-**(1,2,3)** - migration is bound within a sphere at x, y and z axes \
+**(1,2,3)** - migration is bound within a sphere at x, y and z axes\
+
 ---
 Output 1: a changed `pnt_wld_ms1` = a spatial array of demes that contain individuals' left monosome [Bool] arrays \
 Output 2: a changed `pnt_wld_ms2` = a spatial array of demes that contain individuals' right monosome [Bool] arrays \
