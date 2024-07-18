@@ -700,7 +700,6 @@ function fill_random_demes(pnt_wld_ms1, pnt_wld_ms2, pnt_wld_stats, fill::Vector
 end
 
 """
-
 Simulates a range expansion `n_re` times.
 If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTFILL` demes filled with individuals.
 
@@ -731,7 +730,7 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 - **F** - deme-average fitness (**fitn**)
 - **P** - deme populations (**pops**)
 - **S** - deme-average number of homo- and heterozygous selected loci (**AAsel**, **Aasel** and **aasel**)
-- **M** - deme-average number of homo- and heterozygous neutral loci (**AAneu**, **Aaneu** and **aaneu**)
+- **N** - deme-average number of homo- and heterozygous neutral loci (**AAneu**, **Aaneu** and **aaneu**)
 
 `name`: world name
 
@@ -751,9 +750,9 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 
 If starting from existing world, also provide:
 
-`wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays
+`wld_ms1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
 
-`wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays
+`wld_ms2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
 
 `wld_stats`: world stats Dict
 
@@ -926,7 +925,7 @@ end
 # ------------------------------------------------
 
 """
-Randomly mutates at selected regions and calculates the number of mutations in an individual. Used when building the next generation in infinite-sites expansions.
+Randomly adds mutations and calculates the number of mutations in an individual. Used when building the next generation in infinite-sites expansions.
 
 ---
 
@@ -938,47 +937,31 @@ Randomly mutates at selected regions and calculates the number of mutations in a
 
 `s_sel_coef`: selection coefficient
 
-`prop_of_sel_loci`: proportion of selected loci within segr. regions
-
 ---
 
-Output 1: number of deleterious selected mutations
+Output 1: number of deleterious mutations
 
-Output 2: number of beneficial selected mutations
-
-Output 3: number of deleterious neutral mutations
-
-Output 4: number of beneficial neutral mutations
+Output 2: number of beneficial mutations
 
 """
-function mutate_inf(person, mut_rate, n_segr_regions, s_sel_coef, prop_of_sel_loci)
+function mutate_inf(person, mut_rate, n_segr_regions, s_sel_coef)
     get_mutation_random = rand(Poisson(mut_rate))
-    muts_delsel = 0
-    muts_bensel = 0
-    muts_delneu = 0
-    muts_benneu = 0
+    muts_del = 0
+    muts_ben = 0
 
     @fastmath @inbounds for _ in 1:get_mutation_random
         pos_alter = sample(1:n_segr_regions*2)
 
         if rand() < mut_rate
-            if rand() < prop_of_sel_loci
-                person[pos_alter] *= 1 - s_sel_coef
-                muts_delsel += 1
-            else
-                muts_delneu += 1
-            end
+            person[pos_alter] *= 1 - s_sel_coef
+            muts_del += 1
         else
-            if rand() < prop_of_sel_loci
-                person[pos_alter] *= 1 + s_sel_coef
-                muts_bensel += 1
-            else
-                muts_benneu += 1
-            end
+            person[pos_alter] *= 1 + s_sel_coef
+            muts_ben += 1
         end
     end
 
-    return muts_delsel, muts_bensel, muts_delneu, muts_benneu
+    return muts_del, muts_ben
 end
 
 """
@@ -1033,9 +1016,7 @@ Builds the next generation in infinite-sites expansions, i.e. advances the world
 
 `pops_out`: if **true**, the new generation data for populations will be output
 
-`sel_out`: if **true**, the new generation data for selected mutations will be output
-
-`neu_out`: if **true**, the new generation data for neutral mutations will be output
+`mut_out`: if **true**, the new generation data for mutation counts (deleterious & beneficial) will be output
 
 `max_migr`: a tuple of maximum migration area coordinates
 
@@ -1066,15 +1047,11 @@ Output 2: a spatial array of demes with average fitness in the new generation
 
 Output 3: a spatial array of demes with populations in the new generation
 
-Output 4: a spatial array of demes with average deleterious selected mutation count in the new generation
+Output 4: a spatial array of demes with average deleterious mutation count in the new generation
 
-Output 5: a spatial array of demes with average beneficial selected mutation count in the new generation
-
-Output 6: a spatial array of demes with average deleterious neutral mutation count in the new generation
-
-Output 7: a spatial array of demes with average beneficial neutral mutation count in the new generation
+Output 5: a spatial array of demes with average beneficial mutation count in the new generation
 """
-function build_next_gen_inf(pnt_wld::Array{Array{Array{Float32}}}, pnt_wld_stats, fitn_out=false, pops_out=false, sel_out=false, neu_out=false;
+function build_next_gen_inf(pnt_wld::Array{Array{Array{Float32}}}, pnt_wld_stats, fitn_out=false, pops_out=false, mut_out=false;
     max_migr=NaN, migr_mode=DEF_MIGR_MODE, bottleneck=NaN, refl_walls=false, r_max_migr=0, r_coords=[1, 2])
 
     wlddim = pnt_wld_stats["wlddim"]
@@ -1086,10 +1063,8 @@ function build_next_gen_inf(pnt_wld::Array{Array{Array{Float32}}}, pnt_wld_stats
     wld_next = Array{Array{Array{Float32}},wlddim}(undef, pnt_wld_stats["max"]...)
     mean_fitn_next = NaN
     pops_next = NaN
-    muts_delsel_next = NaN
-    muts_bensel_next = NaN
-    muts_delneu_next = NaN
-    muts_benneu_next = NaN
+    muts_del_next = NaN
+    muts_ben_next = NaN
     all_birth_count = 0
 
     # Fill the next generation habitat
@@ -1101,17 +1076,11 @@ function build_next_gen_inf(pnt_wld::Array{Array{Array{Float32}}}, pnt_wld_stats
         pops_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
         fill!(pops_next, NaN)
     end
-    if sel_out
-        muts_delsel_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        muts_bensel_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        fill!(muts_delsel_next, NaN)
-        fill!(muts_bensel_next, NaN)
-    end
-    if neu_out
-        muts_delneu_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        muts_benneu_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
-        fill!(muts_delneu_next, NaN)
-        fill!(muts_benneu_next, NaN)
+    if mut_out
+        muts_del_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
+        muts_ben_next = Array{Float32}(undef, pnt_wld_stats["max"]...)
+        fill!(muts_del_next, NaN)
+        fill!(muts_ben_next, NaN)
     end
 
 
@@ -1138,26 +1107,16 @@ function build_next_gen_inf(pnt_wld::Array{Array{Array{Float32}}}, pnt_wld_stats
                 crossover_inf(gamete_dad, pnt_wld_stats["n_segr_regions"])
                 mate_result = mate_inf(gamete_mom, gamete_dad, pnt_wld_stats["n_segr_regions"])
 
-                muts_delsel, muts_bensel, muts_delneu, muts_benneu = mutate_inf(mate_result, pnt_wld_stats["mut_rate"], pnt_wld_stats["n_segr_regions"], pnt_wld_stats["s_sel_coef"], pnt_wld_stats["prop_of_sel_loci"])
-                if sel_out
-                    if isnan(muts_delsel_next[deme...])
-                        muts_delsel_next[deme...] = 0
+                muts_del, muts_ben = mutate_inf(mate_result, pnt_wld_stats["mut_rate"], pnt_wld_stats["n_segr_regions"], pnt_wld_stats["s_sel_coef"])
+                if mut_out
+                    if isnan(muts_del_next[deme...])
+                        muts_del_next[deme...] = 0
                     end
-                    if isnan(muts_bensel_next[deme...])
-                        muts_bensel_next[deme...] = 0
+                    if isnan(muts_ben_next[deme...])
+                        muts_ben_next[deme...] = 0
                     end
-                    muts_delsel_next[deme...] += muts_delsel
-                    muts_bensel_next[deme...] += muts_bensel
-                end
-                if neu_out
-                    if isnan(muts_delneu_next[deme...])
-                        muts_delneu_next[deme...] = 0
-                    end
-                    if isnan(muts_benneu_next[deme...])
-                        muts_benneu_next[deme...] = 0
-                    end
-                    muts_delneu_next[deme...] += muts_delneu
-                    muts_benneu_next[deme...] += muts_benneu
+                    muts_del_next[deme...] += muts_del
+                    muts_ben_next[deme...] += muts_ben
                 end
 
                 move = calc_migr_dist(deme, pnt_wld_stats, migr_mode, bottleneck, max_migr, refl_walls, r_max_migr, r_coords)
@@ -1179,7 +1138,7 @@ function build_next_gen_inf(pnt_wld::Array{Array{Array{Float32}}}, pnt_wld_stats
         end
     end
 
-    return wld_next, mean_fitn_next, pops_next, muts_delsel_next, muts_bensel_next, muts_delneu_next, muts_benneu_next
+    return wld_next, mean_fitn_next, pops_next, muts_del_next, muts_ben_next
 end
 
 """
@@ -1187,7 +1146,9 @@ Creates an empty world (deme space) with infinite-sites individual structure. 2-
 
 ---
 
-`max`: a tuple of space bounds (maximal coordinates)
+`max`: a tuple of maximal space bounds (coordinates)
+
+`min`: a tuple of minimal space bounds (coordinates). Limited to (1,1) for now
 
 `name`: world name
 
@@ -1212,18 +1173,16 @@ Creates an empty world (deme space) with infinite-sites individual structure. 2-
 
 `h_domin_coef`: dominance coefficient (in heterozygous loci, new_fitness *= **1 -** `h_domin_coef` * `s_sel_coef`)
 
-`prop_of_sel_loci`: proportion of selected loci within segr. regions
-
 ---
 
 Output 1: a spatial array of demes that contain individuals' segr. regions [Float] arrays (all empty)
 
-Output 3: world stats Dict
+Output 2: world stats Dict
 
 """
-function create_empty_world_inf(max=(DEF_X_MAX, DEF_Y_MAX); name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), k_capacity=DEF_K_CAPACITY,
+function create_empty_world_inf(max=(DEF_X_MAX, DEF_Y_MAX); min=(1, 1), name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), k_capacity=DEF_K_CAPACITY,
     r_prolif_rate=DEF_R_PROLIF_RATE, n_segr_regions=DEF_N_SEGR_REGIONS,
-    mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, s_sel_coef=DEF_S_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI)
+    mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, s_sel_coef=DEF_S_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS)
 
     wld = Array{Array{Array{Float32}}}(undef, max...) # array of fitness values of all individuals in space
     for k in Iterators.product([1:n for n in max]...)
@@ -1241,7 +1200,6 @@ function create_empty_world_inf(max=(DEF_X_MAX, DEF_Y_MAX); name=Dates.format(Da
         "migr_mode" => migr_mode,
         "s_sel_coef" => s_sel_coef,
         "prop_of_del_muts" => prop_of_del_muts,
-        "prop_of_sel_loci" => prop_of_sel_loci,
         "wlddim" => length(max)
         #"rangeexps" => []
     )
@@ -1312,12 +1270,9 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 `data_to_generate`: string of letters representing different data to output. Possible values:
 - **F** - deme-average fitness (**fitn**)
 - **P** - deme populations (**pops**)
-- **S** - deme-average number of deleterious and beneficial selected loci (**delsel** and **bensel**)
-- **M** - deme-average number of deleterious and beneficial selected loci (**delneu** and **benneu**)
+- **M** - deme-average number of deleterious and beneficial mutations (**del** and **ben**)
 
 `name`: world name
-
-`prop_of_sel_loci`: proportion of selected loci within segr. regions
 
 `bottleneck`: if not **NaN**, a tuple of bottleneck coordinates
 
@@ -1333,7 +1288,7 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 
 If starting from existing world, also provide:
 
-`wld`: a spatial array of demes that contain individuals' segr. regions [Float] arrays
+`wld`: a spatial array of demes that contain individuals, each of which is a Float array of fitness values
 
 `wld_stats`: world stats Dict
 
@@ -1341,22 +1296,20 @@ If starting from existing world, also provide:
 
 Output: a Dict containing data after the expansion:
 - **stats** - statistics array containing world and range expansion information
-- **fitn**, **pops**, **delsel**, **bensel**, **delneu**, **benneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
+- **fitn**, **pops**, **del**, **ben** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
 function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), max=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
-    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI, bottleneck=NaN, r_max_burnin=0, r_max_exp=0,
-    r_coords=[1, 2], startfill_range=NaN, wld=NaN, wld_stats=NaN)
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0,
+    r_coords=[1, 2], startfill_range=NaN, wld=NaN, wld_stats=NaN, distributed=true)
 
     fitn_wld = NaN
     pops_wld = NaN
-    muts_delsel_wld = NaN
-    muts_bensel_wld = NaN
-    muts_delneu_wld = NaN
-    muts_benneu_wld = NaN
+    muts_del_wld = NaN
+    muts_ben_wld = NaN
 
     if !(wld isa Array{Array{Array{Float32}}})
         #println("No world provided. Creating a new world.")
-        wld, wld_stats = create_empty_world_inf(max; name=name, prop_of_sel_loci=prop_of_sel_loci)
+        wld, wld_stats = create_empty_world_inf(max; name=name)
         if !isa(startfill_range, Tuple) && !any(isnan, max_burnin)
             startfill_range = [1:upper for upper in max_burnin]
         end
@@ -1365,8 +1318,7 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
 
     fitn_out = false
     pops_out = false
-    sel_out = false
-    neu_out = false
+    mut_out = false
     if occursin("F", data_to_generate)
         fitn_out = true
         fitn_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
@@ -1375,15 +1327,10 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
         pops_out = true
         pops_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
     end
-    if occursin("S", data_to_generate)
-        sel_out = true
-        muts_delsel_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
-        muts_bensel_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
-    end
-    if occursin("N", data_to_generate)
-        neu_out = true
-        muts_delneu_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
-        muts_benneu_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
+    if occursin("M", data_to_generate)
+        mut_out = true
+        muts_del_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
+        muts_ben_wld = Array{Float32}(undef, wld_stats["max"]..., 0)
     end
 
     wlddim = wld_stats["wlddim"]
@@ -1398,22 +1345,18 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
             r_max_migr = r_max_exp
         end
 
-        wld, mean_fitn_next, pops_next, muts_delsel_next, muts_bensel_next, muts_delneu_next, muts_benneu_next = build_next_gen_inf(wld, wld_stats, fitn_out, pops_out, sel_out, neu_out;
+        wld, mean_fitn_next, pops_next, muts_delsel_next, muts_bensel_next, muts_delneu_next, muts_benneu_next = build_next_gen_inf(wld, wld_stats, fitn_out, pops_out, mut_out;
             max_migr=max_migr, migr_mode=migr_mode, bottleneck=bottleneck, r_max_migr=r_max_migr, r_coords=r_coords)
 
-        if occursin("F", data_to_generate)
+        if fitn_out
             fitn_wld = cat(fitn_wld, mean_fitn_next, dims=wlddim + 1)
         end
-        if occursin("P", data_to_generate)
+        if pops_out
             pops_wld = cat(pops_wld, pops_next, dims=wlddim + 1)
         end
-        if occursin("S", data_to_generate)
-            muts_delsel_wld = cat(muts_delsel_wld, muts_delsel_next, dims=wlddim + 1)
-            muts_bensel_wld = cat(muts_bensel_wld, muts_bensel_next, dims=wlddim + 1)
-        end
-        if occursin("N", data_to_generate)
-            muts_delneu_wld = cat(muts_delneu_wld, muts_delneu_next, dims=wlddim + 1)
-            muts_benneu_wld = cat(muts_benneu_wld, muts_benneu_next, dims=wlddim + 1)
+        if mut_out
+            muts_del_wld = cat(muts_del_wld, muts_del_next, dims=wlddim + 1)
+            muts_ben_wld = cat(muts_ben_wld, muts_ben_next, dims=wlddim + 1)
         end
     end
 
@@ -1423,8 +1366,7 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
     wld_stats["n_gens_exp"] = n_gens_exp
     wld_stats["n_gens"] = n_gens_total
 
-    return Dict("stats" => wld_stats, "fitn" => fitn_wld, "pops" => pops_wld, "delsel" => muts_delsel_wld, "delneu" => muts_delneu_wld,
-        "bensel" => muts_bensel_wld, "benneu" => muts_benneu_wld)
+    return Dict("stats" => wld_stats, "fitn" => fitn_wld, "pops" => pops_wld, "del" => muts_del_wld, "ben" => muts_ben_wld)
 end
 
 
@@ -1707,7 +1649,7 @@ function re_heatmap_aaneu(re::Dict, gen_start=1, gen_end=re["stats"]["n_gens"]; 
 end
 
 """
-Shows deme-average selected deleterious mutations count of `re` from `gen_start` to `gen_end`.
+Shows deme-average deleterious mutations count of `re` from `gen_start` to `gen_end`.
 
 ---
 
@@ -1725,35 +1667,12 @@ Shows deme-average selected deleterious mutations count of `re` from `gen_start`
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_delsel(re::Dict, gen_start=1, gen_end=re["stats"]["n_gens"]; slow_factor=1, clim=(0, 50), log_base=-1, kwargs...)
-    re_heatmap(re, "delsel", gen_start, gen_end; slow_factor=slow_factor, clim=clim, log_base=log_base, kwargs...)
+function re_heatmap_del(re::Dict, gen_start=1, gen_end=re["stats"]["n_gens"]; slow_factor=1, clim=(0, 50), log_base=-1, kwargs...)
+    re_heatmap(re, "del", gen_start, gen_end; slow_factor=slow_factor, clim=clim, log_base=log_base, kwargs...)
 end
 
 """
-Shows deme-average neutral deleterious mutations count of `re` from `gen_start` to `gen_end`.
-
----
-
-`re`: range expansion results dictionary
-
-`gen_start`: start generation
-
-`gen_end`: end generation
-
-`slow_factor`: number of animation frames per generation
-
-`log_base`: if not **-1**, color shows log values with this as base
-
-`clim`: color bounds (Plots.jl's `clim` parameter)
-
-`kwargs...`: any Plots.jl parameters
-"""
-function re_heatmap_delneu(re::Dict, gen_start=1, gen_end=re["stats"]["n_gens"]; slow_factor=1, clim=(0, 50), log_base=-1, kwargs...)
-    re_heatmap(re, "delneu", gen_start, gen_end; slow_factor=slow_factor, clim=clim, log_base=log_base, kwargs...)
-end
-
-"""
-Shows deme-average selected beneficial mutations count of `re` from `gen_start` to `gen_end`.
+Shows deme-average beneficial mutations count of `re` from `gen_start` to `gen_end`.
 
 ---
 
@@ -1772,30 +1691,7 @@ Shows deme-average selected beneficial mutations count of `re` from `gen_start` 
 `kwargs...`: any Plots.jl parameters
 """
 function re_heatmap_bensel(re::Dict, gen_start=1, gen_end=re["stats"]["n_gens"]; slow_factor=1, clim=(0, 50), log_base=-1, kwargs...)
-    re_heatmap(re, "bensel", gen_start, gen_end; slow_factor=slow_factor, clim=clim, log_base=log_base, kwargs...)
-end
-
-"""
-Shows deme-average neutral beneficial mutations count of `re` from `gen_start` to `gen_end`.
-
----
-
-`re`: range expansion results dictionary
-
-`gen_start`: start generation
-
-`gen_end`: end generation
-
-`slow_factor`: number of animation frames per generation
-
-`log_base`: if not **-1**, color shows log values with this as base
-
-`clim`: color bounds (Plots.jl's `clim` parameter)
-
-`kwargs...`: any Plots.jl parameters
-"""
-function re_heatmap_benneu(re::Dict, gen_start=1, gen_end=re["stats"]["n_gens"]; slow_factor=1, clim=(0, 50), log_base=-1, kwargs...)
-    re_heatmap(re, "benneu", gen_start, gen_end; slow_factor=slow_factor, clim=clim, log_base=log_base, kwargs...)
+    re_heatmap(re, "ben", gen_start, gen_end; slow_factor=slow_factor, clim=clim, log_base=log_base, kwargs...)
 end
 
 """
@@ -2298,18 +2194,121 @@ end =#
 # 1D
 # ------------------------------------------------
 
+"""
+Simulates a range expansion `n_re` times in 1D, starting from one side of a segment space.
+If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTFILL` demes filled with individuals.
+
+---
+
+`n_gens_burnin`: duration of the burn-in phase, used to reach mutation-selection equilibrium
+
+`n_gens_exp`: duration of the expansion
+
+`n_re`: number of replicates
+
+`x_max_burnin`: the outward x-coordinate bound for migration during burn-in
+
+`x_max_exp`: the outward x-coordinate bound for migration during the expansion
+
+`migr_mode`: mode of migration. Possible values:
+- **ort** - orthogonal directions only
+- **all** - orthogonal and diagonal
+- **hex** - hexagonal grid
+- **diag1/2** - orthogonal and half-weighted diagonal
+- **buffon1** - equidistant Buffon-Laplace (see documentation)
+- **buffon2** - uniform Buffon-Laplace
+- **buffon3** - inv.proportional Buffon-Laplace
+
+`startfill_range`: an array of Int ranges of the coordinates that define the area to fill with individuals at start
+
+`data_to_generate`: string of letters representing different data to output. Possible values:
+- **F** - deme-average fitness (**fitn**)
+- **P** - deme populations (**pops**)
+- **S** - deme-average number of homo- and heterozygous selected loci (**AAsel**, **Aasel** and **aasel**)
+- **N** - deme-average number of homo- and heterozygous neutral loci (**AAneu**, **Aaneu** and **aaneu**)
+
+`name`: world name
+
+`bottleneck`: if not **NaN**, a tuple of bottleneck coordinates
+
+`distributed`: if **true**, distribute to threads
+
+If starting from existing world, also provide:
+
+`wld_ms1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
+
+`wld_ms2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
+
+`wld_stats`: world stats Dict
+
+---
+
+Output: a Dict containing data after the expansion:
+- **stats** - statistics array containing world and range expansion information
+- **fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
+"""
 function rangeexp_1d(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; x_max_burnin=DEF_X_MAX_BURNIN, x_max_exp=DEF_X_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
-    data_to_generate=DEF_DATA_TO_GENERATE, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, distributed=true)
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, distributed=true, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN)
 
     rangeexp(n_gens_burnin, n_gens_exp, n_re; max_burnin=(x_max_burnin,), max_exp=(x_max_exp,), max=(x_max_exp,), startfill_range=startfill_range,
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_ms1=wld_ms1, wld_ms2=wld_ms2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, distributed=distributed)
 end
 
+"""
+Simulates a range expansion with infinite-sites individuals `n_re` times in 1D, starting from one side of a segment space.
+If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTFILL` demes filled with individuals.
+
+---
+
+`n_gens_burnin`: duration of the burn-in phase, used to reach mutation-selection equilibrium
+
+`n_gens_exp`: duration of the expansion
+
+`n_re`: number of replicates
+
+`x_max_burnin`: the outward x-coordinate bound for migration during burn-in
+
+`x_max_exp`: the outward x-coordinate bound for migration during the expansion
+
+`migr_mode`: mode of migration. Possible values:
+- **ort** - orthogonal directions only
+- **all** - orthogonal and diagonal
+- **hex** - hexagonal grid
+- **diag1/2** - orthogonal and half-weighted diagonal
+- **buffon1** - equidistant Buffon-Laplace (see documentation)
+- **buffon2** - uniform Buffon-Laplace
+- **buffon3** - inv.proportional Buffon-Laplace
+
+`startfill_range`: an array of Int ranges of the coordinates that define the area to fill with individuals at start
+
+`data_to_generate`: string of letters representing different data to output. Possible values:
+- **F** - deme-average fitness (**fitn**)
+- **P** - deme populations (**pops**)
+- **M** - deme-average number of deleterious and beneficial mutations (**del** and **ben**)
+
+`name`: world name
+
+`bottleneck`: if not **NaN**, a tuple of bottleneck coordinates
+
+`distributed`: if **true**, distribute to threads
+
+If starting from existing world, also provide:
+
+`wld`: a spatial array of demes that contain individuals, each of which is a Float array of fitness values
+
+`wld_stats`: world stats Dict
+
+---
+
+Output: a Dict containing data after the expansion:
+- **stats** - statistics array containing world and range expansion information
+- **fitn**, **pops**, **del**, **ben** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
+"""
 function rangeexp_1d_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; x_max_burnin=DEF_X_MAX_BURNIN, x_max_exp=DEF_X_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
-    data_to_generate=DEF_DATA_TO_GENERATE, wld=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI, distributed=true)
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, distributed=true, wld=NaN, wld_stats=NaN)
 
     rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; max_burnin=(x_max_burnin,), max_exp=(x_max_exp,), max=(x_max_exp,), startfill_range=startfill_range,
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck, prop_of_sel_loci=prop_of_sel_loci, distributed=distributed)
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck, distributed=distributed)
 end
 
 
@@ -2317,7 +2316,7 @@ end
 # ------------------------------------------------
 
 """
-Simulates a strip range expansion, in which a population expands in the positive x direction (after an optional burn-in phase).
+Simulates a 2D strip range expansion, in which a population expands in the positive x direction (after an optional burn-in phase).
 If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTFILL` demes filled with individuals.
 
 ---
@@ -2347,7 +2346,7 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 - **F** - deme-average fitness (**fitn**)
 - **P** - deme populations (**pops**)
 - **S** - deme-average number of homo- and heterozygous selected loci (**AAsel**, **Aasel** and **aasel**)
-- **M** - deme-average number of homo- and heterozygous neutral loci (**AAneu**, **Aaneu** and **aaneu**)
+- **N** - deme-average number of homo- and heterozygous neutral loci (**AAneu**, **Aaneu** and **aaneu**)
 
 `name`: world name
 
@@ -2355,9 +2354,9 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 
 If starting from existing world, also provide:
 
-`wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays
+`wld_ms1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
 
-`wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays
+`wld_ms2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
 
 `wld_stats`: world stats Dict
 
@@ -2384,7 +2383,7 @@ function rangeexp_strip(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_E
 end
 
 """
-Simulates a strip range expansion, in which a population expands in the positive x direction (after an optional burn-in phase).
+Simulates a 2D strip range expansion with infinite-sites individuals, in which a population expands in the positive x direction (after an optional burn-in phase).
 If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTFILL` demes filled with individuals.
 
 ---
@@ -2397,43 +2396,116 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 
 `x_max_exp`: the outward x-coordinate bound for migration during the expansion
 
-`y_max`: the upper y-coordinate bound (lower bound is always **0** currently)
+`y_max`: the upper y-coordinate bound (lower bound is always **1** currently)
 
 `migr_mode`: mode of migration. Possible values:
-- **4** - orthogonal directions only
-- **6** - hexagonal grid
-- **8** - orthogonal and diagonal
+- **ort** - orthogonal directions only
+- **all** - orthogonal and diagonal
+- **hex** - hexagonal grid
 - **diag1/2** - orthogonal and half-weighted diagonal
 - **buffon1** - equidistant Buffon-Laplace (see documentation)
 - **buffon2** - uniform Buffon-Laplace
 - **buffon3** - inv.proportional Buffon-Laplace
 
+`startfill_range`: an array of Int ranges of the coordinates that define the area to fill with individuals at start
+
 `data_to_generate`: string of letters representing different data to output. Possible values:
 - **F** - deme-average fitness (**fitn**)
 - **P** - deme populations (**pops**)
-- **S** - deme-average number of selected mutations (**sel**)
-- **M** - deme-average number of neutral mutations (**neu**)
+- **M** - deme-average number of deleterious and beneficial mutations (**del** and **ben**)
+
+`name`: world name
+
+`bottleneck`: if not **NaN**, a tuple of bottleneck coordinates
 
 If starting from existing world, also provide:
 
-`wld`: world fitness array
+`wld`: a spatial array of demes that contain individuals, each of which is a Float array of fitness values
 
 `wld_stats`: world stats Dict
 
+You can also further specify the space aside from `x_max_burnin`, `x_max_exp` and `y_max`:
+
+`max_burnin`: a tuple of maximum coordinates during burn-in
+
+`max_exp`: a tuple of maximum coordinates during expansion
+
+`max`: a tuple of maximum coordinates of space
+
 ---
 
-
+Output: a Dict containing data after the expansion:
+- **stats** - statistics array containing world and range expansion information
+- **fitn**, **pops**, **del**, **ben** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
 function rangeexp_strip_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP; x_max_burnin=DEF_X_MAX_BURNIN, x_max_exp=DEF_X_MAX_EXP, y_max=DEF_Y_MAX, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
     max_burnin=(x_max_burnin, y_max), max_exp=(x_max_exp, y_max), max=(x_max_exp, y_max),
-    data_to_generate=DEF_DATA_TO_GENERATE, wld=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=("midhole at x=", x_max_burnin * 2), prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI)
+    data_to_generate=DEF_DATA_TO_GENERATE, wld=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=("midhole at x=", x_max_burnin * 2))
 
     rangeexp_inf(n_gens_burnin, n_gens_exp; max_burnin=max_burnin, max_exp=max_exp, max=max, startfill_range=startfill_range,
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, prop_of_sel_loci=prop_of_sel_loci, bottleneck=bottleneck)
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck)
 end
 
-function rangeexp_disk(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1),
-    data_to_generate=DEF_DATA_TO_GENERATE, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, max_exp=NaN, max_burnin=NaN, startfill_range=NaN)
+"""
+Simulates a range expansion, in which a population expands from the center of a 2D disk (after an optional burn-in phase).
+If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTFILL` demes filled with individuals.
+
+---
+
+`n_gens_burnin`: duration of the burn-in phase, used to reach mutation-selection equilibrium
+
+`n_gens_exp`: duration of the expansion
+
+`r_max_burnin`: radius that bounds the burn-in area
+
+`r_max_exp`: radius that bounds the expansion area
+
+`migr_mode`: mode of migration. Possible values:
+- **ort** - orthogonal directions only
+- **all** - orthogonal and diagonal
+- **hex** - hexagonal grid
+- **diag1/2** - orthogonal and half-weighted diagonal
+- **buffon1** - equidistant Buffon-Laplace (see documentation)
+- **buffon2** - uniform Buffon-Laplace
+- **buffon3** - inv.proportional Buffon-Laplace
+
+`startfill_range`: an array of Int ranges of the coordinates that define the area to fill with individuals at start
+
+`data_to_generate`: string of letters representing different data to output. Possible values:
+- **F** - deme-average fitness (**fitn**)
+- **P** - deme populations (**pops**)
+- **S** - deme-average number of homo- and heterozygous selected loci (**AAsel**, **Aasel** and **aasel**)
+- **N** - deme-average number of homo- and heterozygous neutral loci (**AAneu**, **Aaneu** and **aaneu**)
+
+`name`: world name
+
+`bottleneck`: if not **NaN**, a tuple of bottleneck coordinates
+
+If starting from existing world, also provide:
+
+`wld_ms1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
+
+`wld_ms2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
+
+`wld_stats`: world stats Dict
+
+You can also further specify the space aside from `x_max_burnin`, `x_max_exp` and `y_max`:
+
+`max_burnin`: a tuple of maximum coordinates during burn-in
+
+`max_exp`: a tuple of maximum coordinates during expansion
+
+`max`: a tuple of maximum coordinates of space
+
+---
+
+Output: a Dict containing data after the expansion:
+- **stats** - statistics array containing world and range expansion information
+- **fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
+"""
+function rangeexp_disk(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1), 
+    max_exp=NaN, max_burnin=NaN, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN)
 
     if !isa(startfill_range, Array)
         ran = ins_sq(r_max_burnin, r_max_exp)
@@ -2475,7 +2547,7 @@ function rangeexp_cylinder(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GEN
 end
 
 function rangeexp_cylinder_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
-    z_max_burnin=DEF_X_MAX_BURNIN, z_max_exp=DEF_X_MAX_EXP, prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI, max_burnin=(NaN, NaN, z_max_burnin), max_exp=(NaN, NaN, z_max_exp), max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp),
+    z_max_burnin=DEF_X_MAX_BURNIN, z_max_exp=DEF_X_MAX_EXP, max_burnin=(NaN, NaN, z_max_burnin), max_exp=(NaN, NaN, z_max_exp), max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp),
     data_to_generate=DEF_DATA_TO_GENERATE, wld=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)
 
     if !isa(startfill_range, Array)
@@ -2484,7 +2556,7 @@ function rangeexp_cylinder_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N
     end
 
     rangeexp_inf(n_gens_burnin, n_gens_exp; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, max=max,
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI, bottleneck=bottleneck,
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck,
         startfill_range=startfill_range)
 end
 
@@ -2503,7 +2575,7 @@ function rangeexp_sphere(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_
 end
 
 function rangeexp_sphere_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
-    max_burnin=NaN, max_exp=NaN, max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), prop_of_sel_loci=DEF_PROP_OF_SEL_LOCI,
+    max_burnin=NaN, max_exp=NaN, max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1),
     data_to_generate=DEF_DATA_TO_GENERATE, wld=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)
 
     if !isa(startfill_range, Array)
@@ -2512,7 +2584,7 @@ function rangeexp_sphere_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_G
     end
 
     rangeexp_inf(n_gens_burnin, n_gens_exp; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, max=max, r_coords=[1, 2, 3],
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck, prop_of_sel_loci=prop_of_sel_loci,
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck,
         startfill_range=startfill_range)
 end
 

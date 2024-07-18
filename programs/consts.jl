@@ -29,7 +29,6 @@ DEF_PROP_OF_DEL_MUTS = 0.9 # Proportion of deleterious mutations in nature
 # Gene parameters (infinite-sites)
 # ------------------------------------------------
 DEF_N_SEGR_REGIONS = 20 # Number of segregating regions
-DEF_PROP_OF_SEL_LOCI = 1.0 # Proportion of selected loci within those regions
 
 # Expansion parameters
 # ------------------------------------------------
