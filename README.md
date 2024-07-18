@@ -80,7 +80,7 @@ Creates an empty world (deme space) with finite-sites individual structure. 2-di
 `n_loci`: number of loci \
 `n_sel_loci`: number of selected loci \
 `mut_rate`: genome-wide mutation rate \
-`migr_mode`: mode of migration. Possible values: \
+<a name="migr"></a>`migr_mode`: mode of migration. Possible values: \
 &nbsp;&nbsp;&nbsp;**ort** - orthogonal directions only \
 &nbsp;&nbsp;&nbsp;**all** - orthogonal and diagonal \
 &nbsp;&nbsp;&nbsp;**hex** - hexagonal grid \
@@ -95,3 +95,54 @@ Creates an empty world (deme space) with finite-sites individual structure. 2-di
 Output 1: a spatial array of demes that contain individuals' left monosome [Bool] arrays (all empty) \
 Output 2: a spatial array of demes that contain individuals' right monosome [Bool] arrays (all empty) \
 Output 3: world stats Dict
+
+---
+
+### fill_random_demes
+`(pnt_wld_ms1, pnt_wld_ms2, pnt_wld_stats, fill::Vector{UnitRange{Int64}}, n_demes_to_fill=DEF_N_DEMES_STARTFILL)`
+
+Fills random demes within given monosome arrays with finite-sites individuals. Usually used after an empty world is created.
+
+`pnt_wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays \
+`pnt_wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays \
+`pnt_wld_stats`: world stats Dict \
+`fill`: an array of Int ranges of the coordinates that define the area within which to fill \
+`n_demes_to_fill`: number of demes to fill \
+
+---
+
+### rangeexp
+Simulates a range expansion `n_re` times.
+If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTFILL` demes filled with individuals.
+
+---
+
+`n_gens_burnin`: duration of the burn-in phase, used to reach mutation-selection equilibrium \
+`n_gens_exp`: duration of the expansion \
+`n_re`: number of replicates \
+`max_burnin`: a tuple of maximum coordinates during burn-in \
+`max_exp`: a tuple of maximum coordinates during expansion \
+`max`: a tuple of maximum coordinates of space \
+`migr_mode`: mode of migration ([possible values](#migr) \
+`data_to_generate`: string of letters representing different data to output. Possible values: \
+&nbsp;&nbsp;&nbsp;**F** - deme-average fitness (**fitn**) \
+&nbsp;&nbsp;&nbsp;**P** - deme populations (**pops**) \
+&nbsp;&nbsp;&nbsp;**S** - deme-average number of homo- and heterozygous selected loci (**AAsel**, **Aasel** and **aasel**) \
+&nbsp;&nbsp;&nbsp;**M** - deme-average number of homo- and heterozygous neutral loci (**AAneu**, **Aaneu** and **aaneu**) \
+`name`: world name \
+`bottleneck`: if not **NaN**, a tuple of bottleneck coordinates \
+`r_max_burnin`: radius that bounds the burn-in area \
+`r_max_exp`: radius that bounds the expansion area \
+`r_coords`: a tuple (array) of axes' ordinal numbers that the n-sphere with `r_max_migr` covers. For example: \
+&nbsp;&nbsp;&nbsp;**(1,3)** - migration is bound within a disk at x and z axes \
+&nbsp;&nbsp;&nbsp;**(1,2,3)** - migration is bound within a sphere at x, y and z axes \
+`startfill_range`: an array of Int ranges of the coordinates that define the area to fill with individuals at start \
+`distributed`: if **true**, distribute to threads \
+If starting from existing world, also provide: \
+`wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays \
+`wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays \
+`wld_stats`: world stats Dict
+
+Output: a Dict containing data after the expansion: \
+&nbsp;&nbsp;&nbsp;**stats** - statistics array containing world and range expansion information \
+&nbsp;&nbsp;&nbsp;**fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
