@@ -77,7 +77,7 @@ function multi_index(array, fixed_index, fixed_dim)
 end
 
 """
-Returns a range of coordinates of world centre (determined from `r_max_exp`) ± side length of the inscribed square of a circle with radius `r_max_burnin`.
+(Abbreviation of "inscribed square") Returns a range of coordinates of world centre (determined from `r_max_exp`) ± side length of the inscribed square of a circle with radius `r_max_burnin`.
 
 Used in determining the starting fillup of demes in radial expansions.
 
@@ -97,7 +97,7 @@ function ins_sq(r_max_burnin, r_max_exp)
 end
 
 """
-Returns a range of coordinates of world centre (determined from `r_max_exp`) ± side length of the inscribed cube of a sphere with radius `r_max_burnin`.
+(Abbreviation of "inscribed cube") Returns a range of coordinates of world centre (determined from `r_max_exp`) ± side length of the inscribed cube of a sphere with radius `r_max_burnin`.
 
 Used in determining the starting fillup of demes in spherical expansions.
 
