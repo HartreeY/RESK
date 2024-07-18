@@ -72,8 +72,6 @@ The above examples use the finite-sites model for individual genomes. For every 
 
 Builds the next generation in finite-sites expansions, i.e. advances two world arrays (left and right monosomes) by one generation and returns the new generation data for fitness, populations, mutation numbers.
 
----
-
 `pnt_wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays \
 `pnt_wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays \
 `pnt_wld_stats`: world stats Dict \
@@ -86,18 +84,17 @@ Builds the next generation in finite-sites expansions, i.e. advances two world a
 &nbsp;&nbsp;&nbsp;**ort** - orthogonal directions only \
 &nbsp;&nbsp;&nbsp;**all** - orthogonal and diagonal \
 &nbsp;&nbsp;&nbsp;**hex** - hexagonal grid \
-**diag1/2** - orthogonal and half-weighted diagonal \
-**buffon1** - equidistant Buffon-Laplace (see documentation) \
-**buffon2** - uniform Buffon-Laplace \
-**buffon3** - inv.proportional Buffon-Laplace \
+&nbsp;&nbsp;&nbsp;**diag1/2** - orthogonal and half-weighted diagonal \
+&nbsp;&nbsp;&nbsp;**buffon1** - equidistant Buffon-Laplace (see documentation) \
+&nbsp;&nbsp;&nbsp;**buffon2** - uniform Buffon-Laplace \
+&nbsp;&nbsp;&nbsp;**buffon3** - inv.proportional Buffon-Laplace \
 `bottleneck`: if not **NaN**, a tuple of bottleneck coordinates \
 `refl_walls`: if **true**, walls reflect migrants \
 `r_max_migr`: Int maximum migration radius. If **>0**, migration is kept within this radius. Can be used in addition to `max_migr` \
 `r_coords`: a tuple (array) of axes' ordinal numbers that the n-sphere with `r_max_migr` covers. For example: \
-**(1,3)** - migration is bound within a disk at x and z axes \
-**(1,2,3)** - migration is bound within a sphere at x, y and z axes\
+&nbsp;&nbsp;&nbsp;**(1,3)** - migration is bound within a disk at x and z axes \
+&nbsp;&nbsp;&nbsp;**(1,2,3)** - migration is bound within a sphere at x, y and z axes\
 
----
 Output 1: a changed `pnt_wld_ms1` = a spatial array of demes that contain individuals' left monosome [Bool] arrays \
 Output 2: a changed `pnt_wld_ms2` = a spatial array of demes that contain individuals' right monosome [Bool] arrays \
 Output 3: a spatial array of demes with average fitness in the new generation \
