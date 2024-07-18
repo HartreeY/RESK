@@ -71,7 +71,7 @@ RESK is also to generate multiple iterates in one go, and employs RESK uses Juli
 
 Here is a benchmark, which you can find in *programs/examples*, showing the benefit of distributed simulations:
 
-<img src="https://github.com/HartreeY/RESK/blob/main/animations/readme4.png" width="800"/>
+<img src="https://github.com/HartreeY/RESK/blob/main/animations/readme4.png" width="650"/>
 
 ## Main methods
 
