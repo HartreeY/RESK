@@ -65,6 +65,13 @@ The above examples use the finite-sites model for individual genomes. For every 
 
 ![alt text](https://github.com/HartreeY/RESK/blob/main/animations/readme3.gif?raw=true)
 
+### Distributed and batch simulation
+
+RESK is also to generate multiple iterates in one go, and employs RESK uses Julia's standard library's powerful parallel processing in those cases by default. The `rangeexp` methods feature the `distributed` option to toggle distributed processing, and the `n_re` to set the number of replicates. The processes are automatically added and removed via the `addprocs` and `rmprocs` methods.
+
+Here is a benchmark, which you can find in *programs/examples*, showing the benefit of distributed simulations:
+![alt text](https://github.com/HartreeY/RESK/blob/main/animations/readme4.png?raw=true)
+
 ## Main methods
 
 ### create_new_world
@@ -223,7 +230,7 @@ Changes from `rangeexp`:
 
 ---
 
-<a name="reh1"></a>### re_heatmap
+### <a name="reh1"></a>re_heatmap
 `(data::Array, dims::Int, gen_start=1, gen_end=DEF_N_GENS_BURNIN + DEF_N_GENS_EXP, re_index::Int = 1; n_gens_sub=0, slow_factor=1, log_base=-1, clim=:default, kwargs...)`
 
 Shows an animated heatmap of `data` from `gen_start` to `gen_end` in 1D or 2D.
@@ -243,7 +250,15 @@ Shows an animated heatmap of `data` from `gen_start` to `gen_end` in 1D or 2D.
 
 Shows an animated heatmap of `dataname` in `re` from `gen_start` to `gen_end` in 1D or 2D.
 
-Changes from `re_heatmap`([1](#reh1):
+Changes from `re_heatmap`([1](#reh1)):
 
 `re`: range expansion results dictionary \
 `dataname`: name of data in `re`
+
+---
+
+### re_heatmap_[dataname]
+
+Shows *[dataname]* data of `re` from `gen_start` to `gen_end`. For example, `re_heatmap_pops`. This is a useful function since it uses graph options that are optimised for each data type.
+
+See `re_heatmap` for more.
