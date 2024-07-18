@@ -70,7 +70,8 @@ The above examples use the finite-sites model for individual genomes. For every 
 RESK is also to generate multiple iterates in one go, and employs RESK uses Julia's standard library's powerful parallel processing in those cases by default. The `rangeexp` methods feature the `distributed` option to toggle distributed processing, and the `n_re` to set the number of replicates. The processes are automatically added and removed via the `addprocs` and `rmprocs` methods.
 
 Here is a benchmark, which you can find in *programs/examples*, showing the benefit of distributed simulations:
-![alt text](https://github.com/HartreeY/RESK/blob/main/animations/readme4.png?raw=true)
+
+![alt text](https://github.com/HartreeY/RESK/blob/main/animations/readme4.png)
 
 ## Main methods
 
