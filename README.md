@@ -70,16 +70,16 @@ The above examples use the finite-sites model for individual genomes. For every 
 **create_empty_world** \
 (max=(DEF_X_MAX, DEF_Y_MAX); min=(1, 1), name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), k_capacity=DEF_K_CAPACITY, r_prolif_rate=DEF_R_PROLIF_RATE, n_loci=DEF_N_LOCI, n_sel_loci=DEF_N_SEL_LOCI,  mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, s_sel_coef=DEF_S_SEL_COEF, h_domin_coef=DEF_H_DOMIN_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS)
 
-Builds the next generation in finite-sites expansions, i.e. advances two world arrays (left and right monosomes) by one generation and returns the new generation data for fitness, populations, mutation numbers.
+Creates an empty world (deme space) with finite-sites individual structure. 2-dimensional by default.
 
-`pnt_wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays \
-`pnt_wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays \
-`pnt_wld_stats`: world stats Dict \
-`fitn_out`: if **true**, the new generation data for fitness will be output \
-`pops_out`: if **true**, the new generation data for populations will be output \
-`sel_out`: if **true**, the new generation data for selected mutations will be output \
-`neu_out`: if **true**, the new generation data for neutral mutations will be output \
-`max_migr`: a tuple of maximum migration area coordinates \
+`max`: a tuple of space bounds (maximal coordinates) \
+`min`: a tuple of space bounds (minimal coordinates). Limited to (1,1) for now \
+`name`: world name \
+`k_capacity`: capacity of each deme \
+`r_prolif_rate`: proliferation rate \
+`n_loci`: number of loci \
+`n_sel_loci`: number of selected loci \
+`mut_rate`: genome-wide mutation rate \
 `migr_mode`: mode of migration. Possible values: \
 &nbsp;&nbsp;&nbsp;**ort** - orthogonal directions only \
 &nbsp;&nbsp;&nbsp;**all** - orthogonal and diagonal \
@@ -88,20 +88,10 @@ Builds the next generation in finite-sites expansions, i.e. advances two world a
 &nbsp;&nbsp;&nbsp;**buffon1** - equidistant Buffon-Laplace (see documentation) \
 &nbsp;&nbsp;&nbsp;**buffon2** - uniform Buffon-Laplace \
 &nbsp;&nbsp;&nbsp;**buffon3** - inv.proportional Buffon-Laplace \
-`bottleneck`: if not **NaN**, a tuple of bottleneck coordinates \
-`refl_walls`: if **true**, walls reflect migrants \
-`r_max_migr`: Int maximum migration radius. If **>0**, migration is kept within this radius. Can be used in addition to `max_migr` \
-`r_coords`: a tuple (array) of axes' ordinal numbers that the n-sphere with `r_max_migr` covers. For example: \
-&nbsp;&nbsp;&nbsp;**(1,3)** - migration is bound within a disk at x and z axes \
-&nbsp;&nbsp;&nbsp;**(1,2,3)** - migration is bound within a sphere at x, y and z axes\
+`s_sel_coef`: selection coefficient \
+`h_domin_coef`: dominance coefficient (in heterozygous loci, new_fitness *= **1 -** `h_domin_coef` * `s_sel_coef`) \
+`prop_of_del_muts`: proportion of deleterious mutations in nature
 
-Output 1: a changed `pnt_wld_ms1` = a spatial array of demes that contain individuals' left monosome [Bool] arrays \
-Output 2: a changed `pnt_wld_ms2` = a spatial array of demes that contain individuals' right monosome [Bool] arrays \
-Output 3: a spatial array of demes with average fitness in the new generation \
-Output 4: a spatial array of demes with populations in the new generation \
-Output 5: a spatial array of demes with average selected AA mutation count in the new generation \
-Output 6: a spatial array of demes with average selected Aa mutation count in the new generation \
-Output 7: a spatial array of demes with average selected aa mutation count in the new generation \
-Output 8: a spatial array of demes with average neutral AA mutation count in the new generation \
-Output 9: a spatial array of demes with average neutral Aa mutation count in the new generation \
-Output 10: a spatial array of demes with average neutral aa mutation count in the new generation
+Output 1: a spatial array of demes that contain individuals' left monosome [Bool] arrays (all empty) \
+Output 2: a spatial array of demes that contain individuals' right monosome [Bool] arrays (all empty) \
+Output 3: world stats Dict
