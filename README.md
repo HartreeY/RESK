@@ -83,13 +83,13 @@ Builds the next generation in finite-sites expansions, i.e. advances two world a
 `neu_out`: if **true**, the new generation data for neutral mutations will be output \
 `max_migr`: a tuple of maximum migration area coordinates \
 `migr_mode`: mode of migration. Possible values: \
-**ort** - orthogonal directions only \
-**all** - orthogonal and diagonal \
-**hex** - hexagonal grid \
-**diag1/2** - orthogonal and half-weighted diagonal \
-**buffon1** - equidistant Buffon-Laplace (see documentation) \
-**buffon2** - uniform Buffon-Laplace \
-**buffon3** - inv.proportional Buffon-Laplace \
+  **ort** - orthogonal directions only \
+  **all** - orthogonal and diagonal \
+  **hex** - hexagonal grid \
+  **diag1/2** - orthogonal and half-weighted diagonal \
+  **buffon1** - equidistant Buffon-Laplace (see documentation) \
+  **buffon2** - uniform Buffon-Laplace \
+  **buffon3** - inv.proportional Buffon-Laplace \
 `bottleneck`: if not **NaN**, a tuple of bottleneck coordinates \
 `refl_walls`: if **true**, walls reflect migrants \
 `r_max_migr`: Int maximum migration radius. If *>0**, migration is kept within this radius. Can be used in addition to `max_migr` \
