@@ -112,6 +112,10 @@ Fills random demes within given monosome arrays with finite-sites individuals. U
 ---
 
 ### rangeexp
+`(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), max=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, r_coords=[1, 2],
+    startfill_range=NaN, distributed=true, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN)`
+    
 Simulates a range expansion `n_re` times.
 If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTFILL` demes filled with individuals.
 
@@ -152,52 +156,94 @@ Output: a Dict containing data after the expansion: \
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, distributed=true, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN)`
 
 Simulates a range expansion `n_re` times in 1D, starting from one side of a segment space.
-If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTFILL` demes filled with individuals.
 
-`n_gens_burnin`: duration of the burn-in phase, used to reach mutation-selection equilibrium \
-`n_gens_exp`: duration of the expansion \
-`n_re`: number of replicates \
+Changes from `rangeexp`:
+
 `x_max_burnin`: the outward x-coordinate bound for migration during burn-in \
-`x_max_exp`: the outward x-coordinate bound for migration during the expansion \
-`migr_mode`: mode of migration ([possible values](#migr)) \
-`startfill_range`: an array of Int ranges of the coordinates that define the area to fill with individuals at start \
-`data_to_generate`: string of letters representing different data to output ([possible values](#dtg)) \
-`name`: world name \
-`bottleneck`: if not **NaN**, a tuple of bottleneck coordinates \
-`distributed`: if **true**, distribute to threads \
-If starting from existing world, also provide: \
-`wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays \
-`wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays \
-`wld_stats`: world stats Dict
-
-Output: a Dict containing data after the expansion: \
-&nbsp;&nbsp;&nbsp;**stats** - statistics array containing world and range expansion information \
-&nbsp;&nbsp;&nbsp;**fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
+`x_max_exp`: the outward x-coordinate bound for migration during the expansion
 
 ---
 
 ### rangeexp_strip
+`(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP; x_max_burnin=DEF_X_MAX_BURNIN, x_max_exp=DEF_X_MAX_EXP, y_max=DEF_Y_MAX, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=("midhole at x=", x_max_burnin * 2),
+    wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN, max_burnin=(x_max_burnin, y_max), max_exp=(x_max_exp, y_max), max=(x_max_exp, y_max))`
 
-Simulates a strip range expansion, in which a population expands in the positive x direction (after an optional burn-in phase).
-If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTFILL` demes filled with individuals.\
+Simulates a 2D strip range expansion, in which a population expands in the positive x direction.
 
-`n_gens_burnin`: duration of the burn-in phase, used to reach mutation-selection equilibrium \
-`n_gens_exp`: duration of the expansion \
-`n_re`: number of replicates \
+Changes from `rangeexp`:
+
 `x_max_burnin`: the outward x-coordinate bound for migration during burn-in \
 `x_max_exp`: the outward x-coordinate bound for migration during the expansion \
 `y_max`: the upper y-coordinate bound (lower bound is always **1** currently)
-`migr_mode`: mode of migration ([possible values](#migr)) \
-`startfill_range`: an array of Int ranges of the coordinates that define the area to fill with individuals at start \
-`data_to_generate`: string of letters representing different data to output ([possible values](#dtg)) \
-`name`: world name \
-`bottleneck`: if not **NaN**, a tuple of bottleneck coordinates \
-`distributed`: if **true**, distribute to threads \
-If starting from existing world, also provide: \
-`wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays \
-`wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays \
-`wld_stats`: world stats Dict
 
-Output: a Dict containing data after the expansion: \
-&nbsp;&nbsp;&nbsp;**stats** - statistics array containing world and range expansion information \
-&nbsp;&nbsp;&nbsp;**fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
+---
+
+### rangeexp_disk
+`(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1), 
+    max_exp=NaN, max_burnin=NaN, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN)`
+
+Simulates a range expansion, in which a population expands from the radially from the center by default, and that is bound by a disk.
+
+Changes from `rangeexp`:
+
+`r_max_burnin`: radius that bounds the burn-in area \
+`r_max_exp`: radius that bounds the expansion area
+
+---
+
+### rangeexp_cylinder
+`(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
+    z_max_burnin=DEF_X_MAX_BURNIN, z_max_exp=DEF_X_MAX_EXP, max_burnin=(NaN, NaN, z_max_burnin), max_exp=(NaN, NaN, z_max_exp), max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp),
+    data_to_generate=DEF_DATA_TO_GENERATE, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)`
+    
+Simulates a 3D range expansion, in which a population expands in the positive z direction, as well as radially from the z axis, and is bound by a cylinder.
+
+Changes from `rangeexp`:
+
+`r_max_burnin`: XY radius of a cylinder that bounds migration during burn-in \
+`r_max_exp`: XY radius of a cylinder that bounds migration during expansion \
+`z_max_burnin`: the outward z-coordinate bound for migration during burn-in \
+`z_max_exp`: the outward z-coordinate bound for migration during the expansion
+
+---
+
+### rangeexp_sphere
+`(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
+    max_burnin=NaN, max_exp=NaN, max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1),
+    data_to_generate=DEF_DATA_TO_GENERATE, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)`
+
+Simulates a 3D range expansion, in which a population expands radially from the center by default, and that is bound by a sphere.
+
+Changes from `rangeexp`:
+
+`r_max_burnin`: radius of a sphere that bounds migration during burn-in \
+`r_max_exp`: radius of a sphere that bounds migration during expansion
+
+---
+
+<a name="reh1"></a>### re_heatmap
+`(data::Array, dims::Int, gen_start=1, gen_end=DEF_N_GENS_BURNIN + DEF_N_GENS_EXP, re_index::Int = 1; n_gens_sub=0, slow_factor=1, log_base=-1, clim=:default, kwargs...)`
+
+Shows an animated heatmap of `data` from `gen_start` to `gen_end` in 1D or 2D.
+
+`data`: array with dimensions (space + time) \
+`gen_start`: start generation \
+`gen_end`: end generation \
+`re_index`: which replicate to plot \
+`n_gens_sub`: number of generations to subtract; e.g. set this as the number of burn-in gen-s if you wish to display the burn-in gen-s in negative numbers \
+`slow_factor`: number of animation frames per generation \
+`log_base`: if not **-1**, color shows log values with this as base \
+`clim`: color bounds (Plots.jl's `clim` parameter) \
+`kwargs...`: any Plots.jl parameters
+
+### re_heatmap
+`(re::Dict, dataname::String, gen_start=1, gen_end=re["stats"]["n_gens"]; n_gens_sub=re["stats"]["n_gens_burnin"], slow_factor=1, log_base=-1, clim=:default, kwargs...)`
+
+Shows an animated heatmap of `dataname` in `re` from `gen_start` to `gen_end` in 1D or 2D.
+
+Changes from `re_heatmap`([1](#reh1):
+
+`re`: range expansion results dictionary \
+`dataname`: name of data in `re`
