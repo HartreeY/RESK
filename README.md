@@ -63,7 +63,7 @@ The above examples use the finite-sites model for individual genomes. For every 
 
 `rangeexp_sphere_inf`:
 
-![alt text](https://github.com/HartreeY/RESK/blob/main/animations/readme3.gif?raw=true)
+![alt text](https://github.com/HartreeY/RESK/blob/main/img/readme3.gif?raw=true)
 
 ### Distributed and batch simulation
 
