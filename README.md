@@ -9,7 +9,7 @@ To begin using this set of tools, you need to have Julia 1.9+ installed, along w
 Once you have the required packages, you can use the documented methods of this package on your own, or you can follow one of several examples in the *programs/examples* folder.
 
 ### Main use cases
-Include the *resk.jl* script and use its methods.
+Include the *programs/resk.jl* script and use its methods.
 
 To simulate a range expansion once, use `rangeexp` or the methods that start with `rangeexp`:
 
