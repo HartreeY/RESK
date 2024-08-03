@@ -75,13 +75,13 @@ Here is a benchmark, which you can find in *programs/examples*, showing the bene
 
 ## Main methods
 
-### create_new_world
-`(max=(DEF_X_MAX, DEF_Y_MAX); min=(1, 1), name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), k_capacity=DEF_K_CAPACITY, r_prolif_rate=DEF_R_PROLIF_RATE, n_loci=DEF_N_LOCI, n_sel_loci=DEF_N_SEL_LOCI,  mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, s_sel_coef=DEF_S_SEL_COEF, h_domin_coef=DEF_H_DOMIN_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS)`
+### create_empty_world
+`(max::Tuple=(DEF_X_MAX, DEF_Y_MAX); name::String=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), k_capacity=DEF_K_CAPACITY, r_prolif_rate=DEF_R_PROLIF_RATE, n_loci=DEF_N_LOCI, n_sel_loci=DEF_N_SEL_LOCI,  mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, s_sel_coef=DEF_S_SEL_COEF, h_domin_coef=DEF_H_DOMIN_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS)`
 
-Creates an empty world (deme space) with finite-sites individual structure. 2-dimensional by default.
+Creates an empty deme space, i.e. an N-dimensional lattice of demes that can house individuals with a finite-site genetic structure.
+N is determined from the dimensions of the `max` tuple (2-dimensional by default).
 
-`max`: a tuple of maximal space bounds (coordinates) \
-`min`: a tuple of minimal space bounds (coordinates). Limited to (1,1) for now \
+`max`: world extents \
 `name`: world name \
 `k_capacity`: capacity of each deme \
 `r_prolif_rate`: proliferation rate \
