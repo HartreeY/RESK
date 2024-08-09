@@ -200,8 +200,8 @@ end
                             res_y += move_y
                         end
                         if deme[3]+move_z > z_max_migrate || deme[3]+move_z < 1
-                            #move_z = 0
-                            move_z = -move_z
+                            move_z = 0
+                            #move_z = -move_z
                         end
                     end
 
