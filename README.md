@@ -15,6 +15,8 @@ RESK consists of just a couple of files:
 - *init.jl*: initialisation script
 - *defaults.jl*: easy-to-change list of default constants
 
+This repository also includes simple examples (*examples/*) and specific programs used in the aforementioned study (*study/*).
+
 ### Main use cases
 Include the *resk.jl* script and use its methods.
 
