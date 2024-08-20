@@ -54,23 +54,23 @@ These expansion data can be plotted and worked with. To plot expansion data, inc
 re_heatmap_AAsel(test; log_factor=1.02)
 ```
 will output the average number of selected homozygous mutant loci in a deme:
-![alt text](https://github.com/HartreeY/RESK/blob/main/img/readme0.gif?raw=true)
+![alt text](https://github.com/HartreeY/RESK/blob/master/img/readme0.gif?raw=true)
 
 Here's an example of a deme-average fitness heatmap of a longer axial simulation in 2D:
 ```
 test = rangeexp_strip(100,1000;data_to_generate="FPSN",y_max=8,migr_mode="diag1/2")
 ```
-![alt text](https://github.com/HartreeY/RESK/blob/main/img/readme1.gif?raw=true)
+![alt text](https://github.com/HartreeY/RESK/blob/master/img/readme1.gif?raw=true)
 
 The above examples use the finite-sites model for individual genotypes. For every `rangeexp` function, there is also an infinite-sites equivalent (e.g. `rangeexp_inf`). The `_inf` functions are computationally faster, but due to the nature of the model, they cannot output hetero- and homozygosities. Here are some visualised examples of running `_inf` functions:
 
 `rangeexp_cylinder_inf`:
 
-![alt text](https://github.com/HartreeY/RESK/blob/main/img/readme2.gif?raw=true)
+![alt text](https://github.com/HartreeY/RESK/blob/master/img/readme2.gif?raw=true)
 
 `rangeexp_sphere_inf`:
 
-![alt text](https://github.com/HartreeY/RESK/blob/main/img/readme3.gif?raw=true)
+![alt text](https://github.com/HartreeY/RESK/blob/master/img/readme3.gif?raw=true)
 
 ### Distributed and batch simulation
 
@@ -78,7 +78,7 @@ RESK is also to generate multiple replicates in one go, and employs Julia's stan
 
 Here is a benchmark, which you can find in *programs/examples*, showing the benefit of distributed simulations:
 
-<img src="https://github.com/HartreeY/RESK/blob/main/img/readme4.png" width="650"/>
+<img src="https://github.com/HartreeY/RESK/blob/master/img/readme4.png" width="650"/>
 
 ## Main methods
 
