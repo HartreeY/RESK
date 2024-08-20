@@ -8,16 +8,23 @@ To begin using this set of tools, you need to have Julia 1.9+ installed, along w
 
 Once you have the required packages, you can use the documented methods of this package on your own, or you can follow one of several examples in the *programs/examples* folder.
 
-### Main use cases
-Include the *programs/resk.jl* script and use its methods.
+### Main files
+RESK consists of just a couple of files:
+- *resk.jl*: main methods
+- *reskplots.jl*: visualisation methods
+- *init.jl*: initialisation script
+- *defaults.jl*: easy-to-change list of default constants
 
-To simulate a range expansion once, use `rangeexp` or the methods that start with `rangeexp`:
+### Main use cases
+Include the *resk.jl* script and use its methods.
+
+To simulate a range expansion once, use `rangeexp` or methods that start with `rangeexp`:
 
 - 1D: `rangeexp_1d`
 - 2D: `rangeexp_disk`,`rangeexp_strip`
 - 3D: `rangeexp_cylinder`,`rangeexp_sphere`.
 
-Running this with default options, a world (= habitat) will be created, seeded with individuals, and the expansion will be run on it.
+Running this with default options, a world (= habitat) will be created, seeded with individuals, and an expansion will be run on it.
 
 The `rangeexp` functions output a fixed dictionary that includes metadata (**stats**) and expansion data. The types of expansion data within it are determined by the *data_to_generate* argument. It can take on the following values:
 - **F** - **fitn** (deme-average fitness)
@@ -34,15 +41,15 @@ Dict{String, Any} with 9 entries:
   "AAsel" => Float32[0.0 0.0 … 0.0 0.0; 0.0 0.0 … 0.0 0.0; … ; 0.0 0.0 … 0.0 0.…
   "Aasel" => Float32[0.0 0.0 … 0.0 0.0; 0.0 0.0 … 0.0 0.0; … ; 0.0 0.0 … 0.0 0.…
   "aasel" => Float32[0.0 0.0 … 0.0 0.0; 25.0 25.0 … 0.0 25.0; … ; 0.0 0.0 … 0.0…
-  "pops"  => NaN
+  "pops"  => Float32[]
   "fitn" => Float32[-1.0 -1.0 … -1.0 -1.0; 0.05 0.05 … -1.0 0.05; … ; -1.0 -1.…
-  "aaneu" => NaN
-  "Aaneu" => NaN
-  "AAneu" => NaN
+  "aaneu" => Float32[]
+  "Aaneu" => Float32[]
+  "AAneu" => Float32[]
   "stats" => Dict{String, Any}("y_max_burnin"=>10, "x_max"=>100, "migr_mode"=>[…
 ```
 
-These expansion data can be plotted and worked with. To plot expansion data, use unique plotting functions that start with *re_*. For example,
+These expansion data can be plotted and worked with. To plot expansion data, include the *reskplots.jl* file and use the unique plotting functions that start with *re_*. For example,
 ```
 re_heatmap_AAsel(test; log_factor=1.02)
 ```
@@ -55,7 +62,7 @@ test = rangeexp_strip(100,1000;data_to_generate="FPSN",y_max=8,migr_mode="diag1/
 ```
 ![alt text](https://github.com/HartreeY/RESK/blob/main/img/readme1.gif?raw=true)
 
-The above examples use the finite-sites model for individual genomes. For every `rangeexp` function, there is also an infinite-sites equivalent (e.g. `rangeexp_inf`). Practically, `_inf` functions are computationally faster. Some examples of `_inf` functions:
+The above examples use the finite-sites model for individual genotypes. For every `rangeexp` function, there is also an infinite-sites equivalent (e.g. `rangeexp_inf`). The `_inf` functions are computationally faster, but due to the nature of the model, they cannot output hetero- and homozygosities. Here are some visualised examples of running `_inf` functions:
 
 `rangeexp_cylinder_inf`:
 
