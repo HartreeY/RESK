@@ -11,7 +11,7 @@ Once you have the required packages, you can use the documented methods of this 
 ### Main files
 RESK consists of just a couple of files:
 - *resk.jl*: main methods
-- *reskplots.jl*: visualisation methods
+- *reskplots.jl*: visualisation methods (comes as a separate file due to some machines not supporting graphical output)
 - *init.jl*: initialisation script
 - *defaults.jl*: easy-to-change list of default constants
 
@@ -62,7 +62,7 @@ test = rangeexp_strip(100,1000;data_to_generate="FPSN",y_max=8,migr_mode="diag1/
 ```
 ![alt text](https://github.com/HartreeY/RESK/blob/master/img/readme1.gif?raw=true)
 
-The above examples use the finite-sites model for individual genotypes. For every `rangeexp` function, there is also an infinite-sites equivalent (e.g. `rangeexp_inf`). The `_inf` functions are computationally faster, but due to the nature of the model, they cannot output hetero- and homozygosities. Here are some visualised examples of running `_inf` functions:
+The above examples use the finite-sites model for individual genotypes. For every `rangeexp` function, there is also an infinite-sites equivalent (e.g. `rangeexp_inf`). The `_inf` functions are computationally faster, but due to the nature of the model, they cannot output hetero- and homozygosities. Instead, they can output **del** and **ben** (deme-average number of deleterious and beneficial mutations). The finite-sites function currently only simulate deleterious mutations. Here are some visualised examples of running `_inf` functions:
 
 `rangeexp_cylinder_inf`:
 
@@ -270,3 +270,11 @@ Changes from `re_heatmap`([1](#reh1)):
 Shows *[dataname]* data of `re` from `gen_start` to `gen_end`. For example, `re_heatmap_pops`. This is a useful function since it uses graph options that are optimised for each data type.
 
 See `re_heatmap` for more.
+
+## To do
+- implement beneficial mutations for finite-sites
+- include the possibility of multiple and partial range expansions
+- include total mutation count as output too
+- add proper error catching
+- add elitism, proper epistasis, fitness landscapes (rugged etc.), assortative mating etc.
+- implement migration with multiple-deme leaps 
