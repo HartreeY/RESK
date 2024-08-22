@@ -33,6 +33,15 @@ MIGR_DIRS_HEX = [
 # Common functions
 # ------------------------------------------------
 
+#= """
+Gives description for a method.
+"""
+macro d(x)
+    quote
+        display("text/markdown", @doc $x)
+    end    
+end =#
+
 """
 Chooses all values except the specific value `n` at the last dimension.
 """
@@ -1862,10 +1871,10 @@ Finds the average values of `data` over the whole population for each generation
 
 Output: array of averages of `data` for every generation
 """
-function average_all(data::Array, n_gens::Int, dims::Int)
+function average_all(data::Array, n_gens::Int)
     res = Array{Float32}(undef, 0)
     for j in 1:n_gens
-        push!(res, mean(filter(!isnan, multi(data, j, dims))))
+        push!(res, mean(filter(!isnan, data[repeat([:],length(size(data))-2)...,j,:])))
     end
     return res
 end
@@ -1884,7 +1893,7 @@ Finds the average values of `dataname` in `re` over the whole population for eac
 Output: array of averages of `re[dataname]` for every generation
 """
 function average_all(re::Dict, dataname::String)
-    average_all(re[dataname], re["stats"]["n_gens"], re["stats"]["wlddim"] + 1)
+    average_all(re[dataname], re["stats"]["n_gens"])
 end
 
 """

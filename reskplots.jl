@@ -114,7 +114,7 @@ Shows population data of `re` from `gen_start` to `gen_end`.
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap_pops(re::Dict, gen_start=1, gen_end=re["stats"]["n_gens"]; n_gens_sub=re["stats"]["n_gens_burnin"], slow_factor=1, clim=(0, re["stats"]["k_capacity"]), log_base=-1, kwargs...)
+function re_heatmap_pops(re::Dict, gen_start=1, gen_end=re["stats"]["n_gens"]; n_gens_sub=re["stats"]["n_gens_burnin"], slow_factor=1, clim=(0, re["stats"]["capacity"]), log_base=-1, kwargs...)
     re_heatmap(re, "pops", gen_start, gen_end; n_gens_sub=n_gens_sub, slow_factor=slow_factor, clim=clim, log_base=log_base, kwargs...)
 end
 
