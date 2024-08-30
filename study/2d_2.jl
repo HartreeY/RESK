@@ -1,4 +1,4 @@
-@everywhere include("resk.jl")
+@everywhere include("../resk.jl")
 
 test, time = @timed rangeexp_disk_inf(1000,500,20; r_max_burnin=3, r_max_exp=100, data_to_generate="F",capacity=100,prolif_rate=2,
     weightfitn=false,condsel=true,premutate=true,fixed_mate=true,
