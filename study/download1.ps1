@@ -1,5 +1,5 @@
-$sourcePath = "~/rangeexp/resk/data/ooa_move2.re"
-$destFolder = $PSScriptRoot + "\data\hex\"
+$sourcePath = "~/rangeexp/resk/data/ooa_moveex.re"
+$destFolder = $PSScriptRoot + "\data\"
 $compName = "raiden.riken.jp"
 $cred = "hartree"
 $privateKeyPath = "C:\Users\Hartree\Documents\raiden\private"

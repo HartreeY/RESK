@@ -8,7 +8,7 @@ include("defaults.jl")
 # Migration probabilities for each dimensionality -> for each mode
 MIGR_PROBS = [
     Dict(["ort" => (1, 0)]), # 1D
-    Dict(["ort" => (1, 0), "all" => (1 / 2, 1 / 2), "buffon1" => (2 / pi, 1 / pi), "buffon2" => (4 / 3 / pi, 1 / 3 / pi), "buffon3" => (0.4244132, 0.21221), "diag1/2" => (2 / 3, 1 / 3)]), # 2D. To add "hex"!
+    Dict(["ort" => (1, 0), "hex" => (1, 0), "all" => (1 / 2, 1 / 2), "buffon1" => (2 / pi, 1 / pi), "buffon2" => (4 / 3 / pi, 1 / 3 / pi), "buffon3" => (0.4244132, 0.21221), "diag1/2" => (2 / 3, 1 / 3)]), # 2D. To add "hex"!
     Dict(["ort" => (1, 0), "all" => (1 / 2, 1 / 2), "buffon1" => (2 / pi, 1 / pi), "buffon2" => (4 / 3 / pi, 1 / 3 / pi), "buffon3" => (0.4244132, 0.21221), "diag1/2" => (2 / 3, 1 / 3)]) # 3D. To add "hex"! To confirm Buffon for 3d!
 ]
 
@@ -19,15 +19,14 @@ MIGR_DIRS_ORT = [
     [[-1, 0, 0], [1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, -1], [0, 0, 1]] # 3D
 ]
 MIGR_DIRS_DIAG = [
-    [], # 1D
     [[-1, -1], [-1, 1], [1, -1], [1, 1]], # 2D
     [[-1, -1, -1], [-1, -1, 0], [-1, -1, 1], [-1, 0, -1], [-1, 0, 1], [-1, 1, -1], [-1, 1, 0], [-1, 1, 1], [0, -1, -1], [0, -1, 0], [0, -1, 1], [0, 0, 0], [0, 1, -1], [0, 1, 1], [1, -1, -1], [1, -1, 0], [1, -1, 1], [1, 0, -1], [1, 0, 1], [1, 1, -1], [1, 1, 0], [1, 1, 1]] # 3D
 ]
 MIGR_DIRS_HEX = [
-    1 => [], # 1D
-    2 => [[-1, 0], [0, -1], [-1, 1], [0, 1], [1, 0], [1, 1]], # 2D
-    3 => [] # 3D
-] # To do!
+    [], # 1D
+    [[-1, 0], [0, -1], [-1, 1], [0, 1], [1, 0], [1, 1]], # 2D
+    [] # 3D
+]
 
 
 # Common functions
@@ -173,16 +172,19 @@ function calc_migr_dist(deme, wld_stats, migr_mode, bottleneck, max_migr=wld_sta
     if !(migr_mode in keys(MIGR_PROBS[wlddim]))
         migr_mode = "ort"
     end
-    p_lat, p_diag = MIGR_PROBS[wlddim][migr_mode]
     
-    migr_res = p_lat==1 ? 0.5 : rand()
 
-    if rand() < wld_stats["migr_rate"] && migr_res < p_lat + p_diag
-        #println(rand())
-        if migr_res < p_lat
-            dir = copy(sample(MIGR_DIRS_ORT[wlddim]))
-        elseif migr_res < p_lat + p_diag
-            dir = copy(sample(MIGR_DIRS_DIAG[wlddim]))
+    if rand() < wld_stats["migr_rate"]
+        if migr_mode=="hex"
+            dir = copy(sample(MIGR_DIRS_HEX[wlddim]))
+        else
+            p_lat, p_diag = MIGR_PROBS[wlddim][migr_mode]
+            migr_res = p_lat==1 ? 0.5 : rand()
+            if migr_res < p_lat
+                dir = copy(sample(MIGR_DIRS_ORT[wlddim]))
+            elseif migr_res < p_lat + p_diag
+                dir = copy(sample(MIGR_DIRS_DIAG[wlddim]))
+            end
         end
 
         # Raw migration results
@@ -779,7 +781,7 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
     
     if !(wld_ms1 isa Array{Array{Array{Bool}}})
         #println("No world provided. Creating a new world.")
-        wld_ms1, wld_ms2, wld_stats = create_empty_world(max; name=name, capacity=capacity, prolif_rate=prolif_rate, mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef,
+        wld_ms1, wld_ms2, wld_stats = create_empty_world(max; name=name, capacity=capacity, prolif_rate=prolif_rate, mut_rate=mut_rate, migr_rate=migr_rate, migr_mode=migr_mode, sel_coef=sel_coef, domin_coef=domin_coef,
             n_loci=n_loci, n_sel_loci=n_sel_loci)
         if !isa(startfill_range, Array) && !any(isnan, max_burnin)
             startfill_range = [1:upper for upper in max_burnin]
