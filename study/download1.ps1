@@ -1,4 +1,4 @@
-$sourcePath = "~/rangeexp/resk/data/ooa_moveex.re"
+$sourcePath = "~/rangeexp/resk/data/hextest_hex.re"
 $destFolder = $PSScriptRoot + "\data\"
 $compName = "raiden.riken.jp"
 $cred = "hartree"
