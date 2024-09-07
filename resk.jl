@@ -976,6 +976,8 @@ function rangeexp_ray(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_ms1=wld_ms1, wld_ms2=wld_ms2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, distributed=distributed)
 end
 
+const rangeexp_1d = rangeexp_ray
+
 function rangeexp_linear(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, max=(r_max_exp * 2 + 1,), 
     migr_mode=DEF_MIGR_MODE, startfill_range=[(1-ceil(Int,r_max_burnin/2)+r_max_exp):(1+ceil(Int,r_max_burnin/2)+r_max_exp)], prolif_rate=DEF_PROLIF_RATE, max_exp=NaN, max_burnin=NaN,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
@@ -1744,6 +1746,8 @@ function rangeexp_ray_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, premutate=premutate, n_segr_regions=n_segr_regions,
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck, distributed=distributed)
 end
+
+const rangeexp_1d_inf = rangeexp_ray_inf
 
 function rangeexp_linear_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, max=(r_max_exp * 2 + 1,),
     migr_mode=DEF_MIGR_MODE, startfill_range=[(1-ceil(Int,r_max_burnin/2)+r_max_exp):(1+ceil(Int,r_max_burnin/2)+r_max_exp)], prolif_rate=DEF_PROLIF_RATE, max_exp=NaN, max_burnin=NaN,
