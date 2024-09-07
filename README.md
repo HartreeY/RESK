@@ -22,8 +22,8 @@ Include the *resk.jl* script and use its methods.
 
 To simulate a range expansion once, use `rangeexp` or methods that start with `rangeexp`:
 
-- 1D: `rangeexp_1d`
-- 2D: `rangeexp_disk`,`rangeexp_strip`
+- 1D: `rangeexp_ray` (=`rangeexp_1d`),`rangeexp_linear`
+- 2D: `rangeexp_strip`,`rangeexp_disk`
 - 3D: `rangeexp_cylinder`,`rangeexp_sphere`.
 
 Running this with default options, a world (= habitat) will be created, seeded with individuals, and an expansion will be run on it.
