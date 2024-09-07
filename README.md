@@ -22,7 +22,7 @@ Include the *resk.jl* script and use its methods.
 
 To simulate a range expansion once, use `rangeexp` or methods that start with `rangeexp`:
 
-- 1D: `rangeexp_ray` (or `rangeexp_1d`),`rangeexp_linear`
+- 1D: `rangeexp_ray` (=`rangeexp_1d`),`rangeexp_linear`
 - 2D: `rangeexp_strip`,`rangeexp_disk`
 - 3D: `rangeexp_cylinder`,`rangeexp_sphere`.
 
