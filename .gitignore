@@ -1,8 +1,8 @@
 study_old/
 study/data/
-study/dev/
-pkg_try/
-resk080424.jl
+#study/dev/
+#pkg_try/
+#resk080424.jl
 
 # data and metadata folder and all subfolders and files recursive
 data/**/*
