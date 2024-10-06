@@ -19,6 +19,7 @@ MIGR_DIRS_ORT = [
     [[-1, 0, 0], [1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, -1], [0, 0, 1]] # 3D
 ]
 MIGR_DIRS_DIAG = [
+    [], # 1D
     [[-1, -1], [-1, 1], [1, -1], [1, 1]], # 2D
     [[-1, -1, -1], [-1, -1, 0], [-1, -1, 1], [-1, 0, -1], [-1, 0, 1], [-1, 1, -1], [-1, 1, 0], [-1, 1, 1], [0, -1, -1], [0, -1, 0], [0, -1, 1], [0, 0, 0], [0, 1, -1], [0, 1, 1], [1, -1, -1], [1, -1, 0], [1, -1, 1], [1, 0, -1], [1, 0, 1], [1, 1, -1], [1, 1, 0], [1, 1, 1]] # 3D
 ]
@@ -266,57 +267,37 @@ Output 6: average number of neutral aa mutations in this deme
 Output 7: average fitness in this deme
 """
 function calc_muts_and_fitn_in_deme(deme_ms1, deme_ms2, domin_coef, loci, sel_loci=[])
-    len = length(deme_ms1)
-    muts_AAsel_total = 0
-    muts_Aasel_total = 0
-    muts_aasel_total = 0
-    muts_AAneu_total = 0
-    muts_Aaneu_total = 0
-    muts_aaneu_total = 0
     fits = []
+    n_loci = length(loci)
 
-    for i in 1:len
-        muts_AA_sel = 0
-        muts_Aa_sel = 0
-        muts_AA_neu = 0
-        muts_Aa_neu = 0
+    cAA = zeros(n_loci)
+    cAa = zeros(n_loci)
+    caa = zeros(n_loci)
+
+    for i in 1:length(deme_ms1)
         new_fitness = 1.0
 
-        for j in 1:length(loci)
+        for j in 1:n_loci
             if deme_ms1[i][j] == true && deme_ms2[i][j] == true
                 if j in sel_loci
-                    muts_AA_sel += 1
                     new_fitness *= 1 - loci[j]
-                else
-                    muts_AA_neu += 1
                 end
+                cAA[j] += 1
 
             elseif deme_ms1[i][j] == true || deme_ms2[i][j] == true
                 if j in sel_loci
-                    muts_Aa_sel += 1
                     new_fitness *= 1 - domin_coef * loci[j]
-                else
-                    muts_Aa_neu += 1
                 end
+                cAa[j] += 1
+            else
+                caa[j] += 1
             end
         end
 
         push!(fits, new_fitness)
-        muts_AAsel_total += muts_AA_sel
-        muts_Aasel_total += muts_Aa_sel
-        muts_AAneu_total += muts_AA_neu
-        muts_Aaneu_total += muts_Aa_neu
-        muts_aasel_total += length(sel_loci) - muts_AA_sel - muts_Aa_sel
-        muts_aaneu_total += length(loci) - length(sel_loci) - muts_AA_neu - muts_Aa_neu
     end
 
-    muts_AAsel_total /= len
-    muts_Aasel_total /= len
-    muts_aasel_total /= len
-    muts_AAneu_total /= len
-    muts_Aaneu_total /= len
-    muts_aaneu_total /= len
-    return muts_AAsel_total, muts_Aasel_total, muts_aasel_total, muts_AAneu_total, muts_Aaneu_total, muts_aaneu_total, fits
+    return cAA, cAa, caa, fits
 end
 
 function calc_muts_and_fitn_in_deme(deme_ms1, deme_ms2, wld_stats)
@@ -457,8 +438,8 @@ Output 9: a spatial array of demes with average neutral Aa mutation count in the
 
 Output 10: a spatial array of demes with average neutral aa mutation count in the new generation
 """
-function build_next_gen(wld_ms1, wld_ms2, wld_stats, fitn_out=false, pops_out=false, sel_out=false, neu_out=false;
-    max_migr=NaN, migr_mode=DEF_MIGR_MODE, bottleneck=NaN, refl_walls=false, r_max_migr=0, r_coords=[1, 2], mutratelocus=false)
+function build_next_gen(wld_ms1, wld_ms2, wld_stats, fitn_out=false, pops_out=false, mut_out=false, cnt_out=false;
+    max_migr=NaN, migr_mode=DEF_MIGR_MODE, bottleneck=NaN, refl_walls=false, r_max_migr=0, r_coords=[1, 2], mutratelocus=false, relcnt=false)
 
     wlddim = wld_stats["wlddim"]
 
@@ -470,12 +451,12 @@ function build_next_gen(wld_ms1, wld_ms2, wld_stats, fitn_out=false, pops_out=fa
     wld_ms2_next = Array{Array{Array{Bool}},wlddim}(undef, wld_stats["max"]...)
     mean_fitn_next = NaN
     pops_next = NaN
-    muts_AAsel_next = NaN
-    muts_Aasel_next = NaN
-    muts_aasel_next = NaN
-    muts_AAneu_next = NaN
-    muts_Aaneu_next = NaN
-    muts_aaneu_next = NaN
+    AA_next = NaN
+    Aa_next = NaN
+    aa_next = NaN
+    cAA_next = NaN
+    cAa_next = NaN
+    caa_next = NaN
     all_birth_count = 0
 
     # Fill the next generation habitat
@@ -487,44 +468,49 @@ function build_next_gen(wld_ms1, wld_ms2, wld_stats, fitn_out=false, pops_out=fa
         pops_next = Array{Float32}(undef, wld_stats["max"]...)
         fill!(pops_next, NaN)
     end
-    if sel_out
-        muts_AAsel_next = Array{Float32}(undef, wld_stats["max"]...)
-        muts_Aasel_next = Array{Float32}(undef, wld_stats["max"]...)
-        muts_aasel_next = Array{Float32}(undef, wld_stats["max"]...)
-        fill!(muts_AAsel_next, NaN)
-        fill!(muts_Aasel_next, NaN)
-        fill!(muts_aasel_next, NaN)
+    if cnt_out
+        cAA_next = Array{Float32}(undef, wld_stats["max"]...,wld_stats["n_loci"])
+        cAa_next = Array{Float32}(undef, wld_stats["max"]...,wld_stats["n_loci"])
+        caa_next = Array{Float32}(undef, wld_stats["max"]...,wld_stats["n_loci"])
+        fill!(cAA_next, NaN)
+        fill!(cAa_next, NaN)
+        fill!(caa_next, NaN)
     end
-    if neu_out
-        muts_AAneu_next = Array{Float32}(undef, wld_stats["max"]...)
-        muts_Aaneu_next = Array{Float32}(undef, wld_stats["max"]...)
-        muts_aaneu_next = Array{Float32}(undef, wld_stats["max"]...)
-        fill!(muts_AAneu_next, NaN)
-        fill!(muts_Aaneu_next, NaN)
-        fill!(muts_aaneu_next, NaN)
+    if mut_out
+        AA_next = Array{Float32}(undef, wld_stats["max"]...)
+        Aa_next = Array{Float32}(undef, wld_stats["max"]...)
+        aa_next = Array{Float32}(undef, wld_stats["max"]...)
+        fill!(AA_next, NaN)
+        fill!(Aa_next, NaN)
+        fill!(aa_next, NaN)
     end
+
 
     for deme in next_gen_posits
         ms1_at_pos = wld_ms1[deme...]
         ms2_at_pos = wld_ms2[deme...]
 
         fitns = []
-        cnt_res_AAsel, cnt_res_Aasel, cnt_res_aasel, cnt_res_AAneu, cnt_res_Aaneu, cnt_res_aaneu, fitns =
+        cAA, cAa, caa, fitns =
             calc_muts_and_fitn_in_deme(ms1_at_pos, ms2_at_pos, wld_stats)
 
         if fitn_out
             mean_fitn_next[deme...] = mean(fitns)
         end
-        if sel_out
-            muts_AAsel_next[deme...] = cnt_res_AAsel
-            muts_Aasel_next[deme...] = cnt_res_Aasel
-            muts_aasel_next[deme...] = cnt_res_aasel
+        if cnt_out
+            for i in 1:wld_stats["n_loci"]
+                cAA_next[deme...,i] = cAA[i]
+                cAa_next[deme...,i] = cAa[i]
+                caa_next[deme...,i] = caa[i]
+            end
         end
-        if neu_out
-            muts_AAneu_next[deme...] = cnt_res_AAneu
-            muts_Aaneu_next[deme...] = cnt_res_Aaneu
-            muts_aaneu_next[deme...] = cnt_res_aaneu
+        if mut_out
+            lenn = length(ms1_at_pos)
+            AA_next[deme...] = relcnt ? sum(cAA)/lenn/wld_stats["n_loci"] : sum(cAA)/lenn
+            Aa_next[deme...] = relcnt ? sum(cAa)/lenn/wld_stats["n_loci"] : sum(cAa)/lenn
+            aa_next[deme...] = relcnt ? sum(caa)/lenn/wld_stats["n_loci"] : sum(caa)/lenn
         end
+
 
         next_generation_size = next_gen_pops[deme...]
 
@@ -568,7 +554,7 @@ function build_next_gen(wld_ms1, wld_ms2, wld_stats, fitn_out=false, pops_out=fa
         end
     end
 
-    return wld_ms1_next, wld_ms2_next, mean_fitn_next, pops_next, muts_AAsel_next, muts_Aasel_next, muts_aasel_next, muts_AAneu_next, muts_Aaneu_next, muts_aaneu_next
+    return wld_ms1_next, wld_ms2_next, mean_fitn_next, pops_next, AA_next, Aa_next, aa_next, cAA_next, cAa_next, caa_next
 end
 
 """
@@ -757,14 +743,14 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci), mutratelocus=false,
     startfill_range=NaN, distributed=true, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN)
 
-    fitn_wld = Array{Float32}(undef,0)
-    pops_wld = Array{Float32}(undef,0)
-    muts_AAsel_wld = Array{Float32}(undef,0)
-    muts_Aasel_wld = Array{Float32}(undef,0)
-    muts_aasel_wld = Array{Float32}(undef,0)
-    muts_AAneu_wld = Array{Float32}(undef,0)
-    muts_Aaneu_wld = Array{Float32}(undef,0)
-    muts_aaneu_wld = Array{Float32}(undef,0)
+    fitn_wld = []
+    pops_wld = []
+    AA_wld = []
+    Aa_wld = []
+    aa_wld = []
+    cAA_wld = []
+    cAa_wld = []
+    caa_wld = []
 
     #= if n_re>1
         procs = addprocs(n_re)
@@ -796,8 +782,9 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
 
     fitn_out = false
     pops_out = false
-    sel_out = false
-    neu_out = false
+    mut_out = false
+    cnt_out = false
+
     if occursin("F", data_to_generate)
         fitn_out = true
         fitn_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
@@ -806,17 +793,17 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
         pops_out = true
         pops_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
     end
-    if occursin("S", data_to_generate)
-        sel_out = true
-        muts_AAsel_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
-        muts_Aasel_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
-        muts_aasel_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
+    if occursin("C", data_to_generate)
+        cnt_out = true
+        cAA_wld = SharedArray{Float32}(wld_stats["max"]..., wld_stats["n_loci"], n_gens, n_re)
+        cAa_wld = SharedArray{Float32}(wld_stats["max"]..., wld_stats["n_loci"], n_gens, n_re)
+        caa_wld = SharedArray{Float32}(wld_stats["max"]..., wld_stats["n_loci"], n_gens, n_re)
     end
-    if occursin("N", data_to_generate)
-        neu_out = true
-        muts_AAneu_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
-        muts_Aaneu_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
-        muts_aaneu_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
+    if occursin("M", data_to_generate)
+        mut_out = true
+        AA_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
+        Aa_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
+        aa_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
     end
 
 
@@ -833,8 +820,8 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
                             max_migr = max_exp
                             r_max_migr = r_max_exp
                         end
-                        wld_ms1[j], wld_ms2[j], fitn_next, pops_next, muts_AAsel_next, muts_Aasel_next, muts_aasel_next, muts_AAneu_next,
-                        muts_Aaneu_next, muts_aaneu_next = build_next_gen(wld_ms1[j], wld_ms2[j], wld_stats, fitn_out, pops_out, sel_out, neu_out;
+                        wld_ms1[j], wld_ms2[j], fitn_next, pops_next, AA_next, Aa_next, aa_next, cAA_next, cAa_next, caa_next = build_next_gen(wld_ms1[j], wld_ms2[j], wld_stats, 
+                            fitn_out, pops_out, mut_out, cnt_out;
                             max_migr=max_migr, migr_mode=migr_mode, bottleneck=bottleneck, r_max_migr=r_max_migr, r_coords=r_coords, mutratelocus=mutratelocus)
                         if fitn_out
                             fitn_wld[repeat([:],wlddim)...,g,j] = fitn_next
@@ -842,15 +829,15 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
                         if pops_out
                             pops_wld[repeat([:],wlddim)...,g,j] = pops_next
                         end
-                        if sel_out
-                            muts_AAsel_wld[repeat([:],wlddim)...,g,j] = muts_AAsel_next
-                            muts_Aasel_wld[repeat([:],wlddim)...,g,j] = muts_Aasel_next
-                            muts_aasel_wld[repeat([:],wlddim)...,g,j] = muts_aasel_next
+                        if cnt_out
+                            cAA_wld[repeat([:],wlddim+1)...,g,j] = cAA_next
+                            cAa_wld[repeat([:],wlddim+1)...,g,j] = cAa_next
+                            caa_wld[repeat([:],wlddim+1)...,g,j] = caa_next
                         end
-                        if neu_out
-                            muts_AAneu_wld[repeat([:],wlddim)...,g,j] = muts_AAneu_next
-                            muts_Aaneu_wld[repeat([:],wlddim)...,g,j] = muts_Aaneu_next
-                            muts_aaneu_wld[repeat([:],wlddim)...,g,j] = muts_aaneu_next
+                        if mut_out
+                            AA_wld[repeat([:],wlddim)...,g,j] = AA_next
+                            Aa_wld[repeat([:],wlddim)...,g,j] = Aa_next
+                            aa_wld[repeat([:],wlddim)...,g,j] = aa_next
                         end
                     end
                 end
@@ -866,8 +853,8 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
                 max_migr = max_exp
                 r_max_migr = r_max_exp
             end
-            wld_ms1[j], wld_ms2[j], fitn_next, pops_next, muts_AAsel_next, muts_Aasel_next, muts_aasel_next, muts_AAneu_next,
-            muts_Aaneu_next, muts_aaneu_next = build_next_gen(wld_ms1[j], wld_ms2[j], wld_stats, fitn_out, pops_out, sel_out, neu_out;
+            wld_ms1[j], wld_ms2[j], fitn_next, pops_next, AA_next, Aa_next, aa_next, cAA_next, cAa_next, caa_next = build_next_gen(wld_ms1[j], wld_ms2[j], wld_stats,
+                fitn_out, pops_out, mut_out, cnt_out;
                 max_migr=max_migr, migr_mode=migr_mode, bottleneck=bottleneck, r_max_migr=r_max_migr, r_coords=r_coords, mutratelocus=mutratelocus)
             if fitn_out
                 fitn_wld[repeat([:],wlddim)...,g,j] = fitn_next
@@ -875,15 +862,15 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
             if pops_out
                 pops_wld[repeat([:],wlddim)...,g,j] = pops_next
             end
-            if sel_out
-                muts_AAsel_wld[repeat([:],wlddim)...,g,j] = muts_AAsel_next
-                muts_Aasel_wld[repeat([:],wlddim)...,g,j] = muts_Aasel_next
-                muts_aasel_wld[repeat([:],wlddim)...,g,j] = muts_aasel_next
+            if cnt_out
+                cAA_wld[repeat([:],wlddim+1)...,g,j] = cAA_next
+                cAa_wld[repeat([:],wlddim+1)...,g,j] = cAa_next
+                caa_wld[repeat([:],wlddim+1)...,g,j] = caa_next
             end
-            if neu_out
-                muts_AAneu_wld[repeat([:],wlddim)...,g,j] = muts_AAneu_next
-                muts_Aaneu_wld[repeat([:],wlddim)...,g,j] = muts_Aaneu_next
-                muts_aaneu_wld[repeat([:],wlddim)...,g,j] = muts_aaneu_next
+            if mut_out
+                AA_wld[repeat([:],wlddim)...,g,j] = AA_next
+                Aa_wld[repeat([:],wlddim)...,g,j] = Aa_next
+                aa_wld[repeat([:],wlddim)...,g,j] = aa_next
             end
         end
     end
@@ -908,8 +895,9 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
     end
     needed_data("P",pops_wld) =#
 
-    return Dict("stats" => wld_stats, "fitn" => Array(fitn_wld), "pops" => Array(pops_wld), "AAsel" => Array(muts_AAsel_wld), "Aasel" => Array(muts_Aasel_wld),
-        "aasel" => Array(muts_aasel_wld), "AAneu" => Array(muts_AAneu_wld), "Aaneu" => Array(muts_Aaneu_wld), "aaneu" => Array(muts_aaneu_wld))
+    return Dict("stats" => wld_stats, "fitn" => Array(fitn_wld), "pops" => Array(pops_wld),
+        "AA" => Array(AA_wld), "Aa" => Array(Aa_wld), "aa" => Array(aa_wld),
+        "cAA" => Array(cAA_wld), "cAa" => Array(cAa_wld), "caa" => Array(caa_wld))
 end
 
 """
@@ -1918,11 +1906,11 @@ function average_all(re::Dict, dataname::String)
 end
 
 """
-Finds the average value of `data` between all demes at the expansion front.
+Finds the average value of `data` between all demes at the expansion front, for all replicates.
 
 ---
 
-`data`: array with dimensions (space + time)
+`data`: array with dimensions (space + time + 1)
 
 `n_gens`: number of generations
 
@@ -1934,7 +1922,7 @@ Finds the average value of `data` between all demes at the expansion front.
 
 ---
 
-Output: array of averages of `data` for every generation
+Output: array of averages of `data` for every generation and every replicate
 """
 function average_front(data, n_gens, x_max; greaterzero=false, oneside=false, divide=true)
     n_re = size(data, 3)
@@ -2150,7 +2138,7 @@ function average_front(re, dataname; greaterzero=false, oneside=false, divide=tr
 end
 
 """
-Finds the front array of `dataname` in `re`.
+Finds the front array of `dataname` in `re`, for every replicate.
 
 ---
 
@@ -2162,7 +2150,7 @@ Finds the front array of `dataname` in `re`.
 
 ---
 
-Output: front array of the same dimensions as `re[dataname]` (space + time)
+Output: front array of the same dimensions as `re[dataname]` (space + time + 1)
 """
 function front_array(re, dataname; oneside=false)
     front_array(re[dataname], re["stats"]["n_gens"], re["stats"]["max"]...; oneside=oneside)
@@ -2170,23 +2158,24 @@ end
 
 # 1D
 function front_array(data, n_gens, x_max; oneside=false)
-    front_arr = fill(NaN, x_max, n_gens)
+    n_re = size(data, 3)
+    front_arr = fill(NaN, x_max, n_gens, n_re)
 
-    for j in 1:n_gens
+    for i in 1:n_re, j in 1:n_gens
         frontier = x_max
-        while frontier != 1 && isnan(data[frontier, j])
+        while frontier != 1 && isnan(data[frontier, j, i])
             frontier -= 1
         end
-        if !isnan(data[frontier, j])
-            front_arr[frontier, j] = data[frontier, j]
+        if !isnan(data[frontier, j, i])
+            front_arr[frontier, j, i] = data[frontier, j, i]
         end
         if !oneside
             frontier = 1
-            while frontier != x_max && isnan(data[frontier, j])
+            while frontier != x_max && isnan(data[frontier, j, i])
                 frontier += 1
             end
-            if !isnan(data[frontier, j])
-                front_arr[frontier, j] = data[frontier, j]
+            if !isnan(data[frontier, j, i])
+                front_arr[frontier, j, i] = data[frontier, j, i]
             end
         end
     end
@@ -2195,27 +2184,28 @@ end
 
 # 2D
 function front_array(data::Array, n_gens, x_max, y_max; oneside=false)
+    n_re = size(data, 4)
     front_arr = fill(NaN, x_max, y_max, n_gens)
-    for j in 1:n_gens
+    for i in 1:n_re, j in 1:n_gens
         # scanning every y: side 1
         for _y in 1:y_max
             frontier_x = x_max
-            while frontier_x != 1 && isnan(data[frontier_x, _y, j])
+            while frontier_x != 1 && isnan(data[frontier_x, _y, j, i])
                 frontier_x -= 1
             end
-            if !isnan(data[frontier_x, _y, j])
-                front_arr[frontier_x, _y, j] = data[frontier_x, _y, j]
+            if !isnan(data[frontier_x, _y, j, i])
+                front_arr[frontier_x, _y, j, i] = data[frontier_x, _y, j, i]
             end
         end
         # scanning every y: side 2
         if !oneside
             for _y in 1:y_max
                 frontier_x = 1
-                while frontier_x != x_max && isnan(data[frontier_x, _y, j])
+                while frontier_x != x_max && isnan(data[frontier_x, _y, j, i])
                     frontier_x += 1
                 end
-                if !isnan(data[frontier_x, _y, j])
-                    front_arr[frontier_x, _y, j] = data[frontier_x, _y, j]
+                if !isnan(data[frontier_x, _y, j, i])
+                    front_arr[frontier_x, _y, j, i] = data[frontier_x, _y, j, i]
                 end
             end
         end
@@ -2224,21 +2214,21 @@ function front_array(data::Array, n_gens, x_max, y_max; oneside=false)
             # scanning every x: side 1
             for _x in 1:x_max
                 frontier_y = y_max
-                while frontier_y != 1 && isnan(data[_x, frontier_y, j])
+                while frontier_y != 1 && isnan(data[_x, frontier_y, j, i])
                     frontier_y -= 1
                 end
-                if !isnan(data[_x, frontier_y, j])
-                    front_arr[_x, frontier_y, j] = data[_x, frontier_y, j]
+                if !isnan(data[_x, frontier_y, j, i])
+                    front_arr[_x, frontier_y, j, i] = data[_x, frontier_y, j, i]
                 end
             end
             # scanning every x: side 2
             for _x in 1:x_max
                 frontier_y = 1
-                while frontier_y != y_max && isnan(data[_x, frontier_y, j])
+                while frontier_y != y_max && isnan(data[_x, frontier_y, j, i])
                     frontier_y += 1
                 end
-                if !isnan(data[_x, frontier_y, j] > 0)
-                    front_arr[_x, frontier_y, j] = data[_x, frontier_y, j]
+                if !isnan(data[_x, frontier_y, j, i] > 0)
+                    front_arr[_x, frontier_y, j, i] = data[_x, frontier_y, j, i]
                 end
             end
         end
@@ -2248,28 +2238,29 @@ end
 
 # 3D
 function front_array(data::Array, n_gens, x_max, y_max, z_max; oneside=false)
-    front_arr = fill(NaN, x_max, y_max, z_max, n_gens)
+    n_re = size(data, 5)
+    front_arr = fill(NaN, x_max, y_max, z_max, n_gens, n_re)
 
-    for j in 1:n_gens
+    for i in 1:n_re, j in 1:n_gens
         # scanning every xy: side 1
         for _x in 1:x_max, _y in 1:y_max
             frontier_z = z_max
-            while frontier_z != 1 && isnan(data[_x, _y, frontier_z, j])
+            while frontier_z != 1 && isnan(data[_x, _y, frontier_z, j, i])
                 frontier_z -= 1
             end
-            if !isnan(data[_x, _y, frontier_z, j])
-                front_arr[_x, _y, frontier_z, j] = data[_x, _y, frontier_z, j]
+            if !isnan(data[_x, _y, frontier_z, j, i])
+                front_arr[_x, _y, frontier_z, j, i] = data[_x, _y, frontier_z, j, i]
             end
         end
         # scanning every xy: side 2
         if !oneside
             for _x in 1:x_max, _y in 1:y_max
                 frontier_z = 1
-                while frontier_z != z_max && isnan(data[_x, _y, frontier_z, j])
+                while frontier_z != z_max && isnan(data[_x, _y, frontier_z, j, i])
                     frontier_z += 1
                 end
-                if !isnan(data[_x, _y, frontier_z, j])
-                    front_arr[_x, _y, frontier_z, j] = data[_x, _y, frontier_z, j]
+                if !isnan(data[_x, _y, frontier_z, j, i])
+                    front_arr[_x, _y, frontier_z, j, i] = data[_x, _y, frontier_z, j, i]
                 end
             end
         end
@@ -2278,42 +2269,42 @@ function front_array(data::Array, n_gens, x_max, y_max, z_max; oneside=false)
             # scanning every yz: side 1
             for _y in 1:y_max, _z in 1:z_max
                 frontier_x = x_max
-                while frontier_x != 1 && isnan(data[frontier_x, _y, _z, j])
+                while frontier_x != 1 && isnan(data[frontier_x, _y, _z, j, i])
                     frontier_x -= 1
                 end
-                if !isnan(data[frontier_x, _y, _z, j])
-                    front_arr[frontier_x, _y, _z, j] = data[frontier_x, _y, _z, j]
+                if !isnan(data[frontier_x, _y, _z, j, i])
+                    front_arr[frontier_x, _y, _z, j, i] = data[frontier_x, _y, _z, j, i]
                 end
             end
             # scanning every yz: side 2
             for _y in 1:y_max, _z in 1:z_max
                 frontier_x = 1
-                while frontier_x != x_max && isnan(data[frontier_x, _y, _z, j])
+                while frontier_x != x_max && isnan(data[frontier_x, _y, _z, j, i])
                     frontier_x += 1
                 end
-                if !isnan(data[frontier_x, _y, _z, j])
-                    front_arr[frontier_x, _y, _z, j] = data[frontier_x, _y, _z, j]
+                if !isnan(data[frontier_x, _y, _z, j, i])
+                    front_arr[frontier_x, _y, _z, j, i] = data[frontier_x, _y, _z, j, i]
                 end
             end
 
             # scanning every xz: side 1
             for _x in 1:x_max, _z in 1:z_max
                 frontier_y = y_max
-                while frontier_y != 1 && isnan(data[_x, frontier_y, _z, j])
+                while frontier_y != 1 && isnan(data[_x, frontier_y, _z, j, i])
                     frontier_y -= 1
                 end
-                if !isnan(data[_x, frontier_y, _z, j])
-                    front_arr[_x, frontier_y, _z, j] = data[_x, frontier_y, _z, j]
+                if !isnan(data[_x, frontier_y, _z, j, i])
+                    front_arr[_x, frontier_y, _z, j, i] = data[_x, frontier_y, _z, j, i]
                 end
             end
             # scanning every yz: side 2
             for _x in 1:x_max, _z in 1:z_max
                 frontier_y = 1
-                while frontier_y != y_max && isnan(data[_x, frontier_y, _z, j, i])
+                while frontier_y != y_max && isnan(data[_x, frontier_y, _z, j, i, i])
                     frontier_y += 1
                 end
-                if !isnan(data[_x, frontier_y, _z, j])
-                    front_arr[_x, frontier_y, _z, j] = data[_x, frontier_y, _z, j]
+                if !isnan(data[_x, frontier_y, _z, j, i])
+                    front_arr[_x, frontier_y, _z, j, i] = data[_x, frontier_y, _z, j, i]
                 end
             end
         end
@@ -2375,14 +2366,27 @@ Finds an average (at each generation) over multiple similar time series (replica
 
 `ts_arr`: time series array
 
-`n_gens_burnin`: number of burn-in generations
+`n_gens`: generation to stop at
 
 ---
 
 Output: averaged time series
 """
-function average_ts(ts_arr, n_gens)
+function average_ts(ts_arr, n_gens=size(ts_arr))
     return [mean(ts_arr[i,:]) for i in 1:n_gens]
+end
+
+function analyse(re,plustext,col,col2)
+    #popsfront_ort = front_array(re_ort,"pops";oneside=true)
+    avfront = average_front(re,"pops";oneside=true)
+    avavfront = average_ts(avfront, re["stats"]["n_gens"])
+    N_e_cumfrset = fill(NaN, re["stats"]["n_gens_burnin"])
+    for i in expan_range
+        push!(N_e_cumfrset,mean([harmmean(avfront[(re["stats"]["n_gens_burnin"]):i,k]) for k in 1:n_res]))
+    end
+    Plots.plot!(N_e_cumfrset[2:end],xlabel="Generation",title="",yformatter=:plain,label="Ne ($n_res sims average, $plustext)",color=col)
+    Plots.plot!(avavfront[2:end],label="Front population ($n_res sims average, $plustext)",color=col2)
+    Plots.annotate!(290,25,Plots.text("Capacity = $(re["stats"]["capacity"])", :black, :right, 14))
 end
 
 

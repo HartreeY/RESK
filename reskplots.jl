@@ -239,7 +239,8 @@ Shows a heatstack (3d heatmap) of `dataname` in `re`.
 
 `scene`: if specified, use a custom GLMakie scene
 """
-function re_heatstack_frame(re::Dict, dataname::String, x_range=1:re["stats"]["max"][1], z_range=1:re["stats"]["max"][3], defc=false, clim=(minimum(filter(!isnan, re[dataname])), maximum(filter(!isnan, re[dataname]))); title="", scene=Figure())
+function re_heatstack_frame(re::Dict, dataname::String, x_range=1:re["stats"]["max"][1], z_range=1:re["stats"]["max"][3], defc=false, 
+    clim=(minimum(filter(!isnan, re[dataname])), maximum(filter(!isnan, re[dataname]))); title="", scene=Figure())
 
     if defc
         if dataname=="pops"
@@ -275,12 +276,12 @@ Shows an animated heatstack (3d heatmap) of `data`.
 
 `n_gens_burnin`: number of burn-in next_generation_size
 """
-function re_heatstack(data::Array, gen_start, gen_end; clim=NaN, x_range=1:1, z_range=1:1, title="", n_gens_burnin=0)
+function re_heatstack(data::Array, gen_start=1, gen_end=size(data,4); clim=NaN, x_range=1:size(data,1), z_range=1:size(data,3), title="", n_gens_burnin=0)
     scene = Figure()
 
     if isnan(clim)
         no_nans = filter(!isnan, data)
-        clim = (minimum(no_nans), maximum(no_nans))
+        clim = minimum(no_nans)==maximum(no_nans) ? (0,1) : (minimum(no_nans), maximum(no_nans))
         println(clim)
     end
 
