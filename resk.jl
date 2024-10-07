@@ -2402,6 +2402,23 @@ macro d(x)
     end    
 end =#
 
+function Ne(data,range=:)
+    return [harmmean(k[range]) for k in data]
+end
+
+function Ne_avcuml(data,n_gens_burnin,range)
+    N_e_av_cuml_set = []
+    for i in range
+        push!(N_e_av_cuml_set,mean([harmmean(k[n_gens_burnin:i]) for k in data]))
+    end
+    return N_e_av_cuml_set
+end
+
+function F_ST(data)
+    F_ST_set = [1/(k+1) for k in data]
+    return mean(F_ST_set)
+end
+
 vc(x) = cat(eachslice(x, dims=4)..., dims=2)
 
 function re_get_avrel(data::Array, x, gen, denom)
