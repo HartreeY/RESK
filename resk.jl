@@ -2376,19 +2376,6 @@ function average_ts(ts_arr, n_gens=size(ts_arr))
     return [mean(ts_arr[i,:]) for i in 1:n_gens]
 end
 
-function analyse(re,plustext,col,col2)
-    #popsfront_ort = front_array(re_ort,"pops";oneside=true)
-    avfront = average_front(re,"pops";oneside=true)
-    avavfront = average_ts(avfront, re["stats"]["n_gens"])
-    N_e_cumfrset = fill(NaN, re["stats"]["n_gens_burnin"])
-    for i in expan_range
-        push!(N_e_cumfrset,mean([harmmean(avfront[(re["stats"]["n_gens_burnin"]):i,k]) for k in 1:n_res]))
-    end
-    Plots.plot!(N_e_cumfrset[2:end],xlabel="Generation",title="",yformatter=:plain,label="Ne ($n_res sims average, $plustext)",color=col)
-    Plots.plot!(avavfront[2:end],label="Front population ($n_res sims average, $plustext)",color=col2)
-    Plots.annotate!(290,25,Plots.text("Capacity = $(re["stats"]["capacity"])", :black, :right, 14))
-end
-
 
 # Upcoming features
 # ------------------------------------------------
@@ -2402,8 +2389,41 @@ macro d(x)
     end    
 end =#
 
+function af_A(re,deme,locus,gen=re["stats"]["n_gens"],re_index=1)
+    return (2*re["cAA"][deme...,locus,gen,re_index]+re["cAa"][deme...,locus,gen,re_index])/re["stats"]["n_loci"]
+end
+
+function af_a(re,deme,locus,gen=re["stats"]["n_gens"],re_index=1)
+    return (2*re["caa"][deme...,locus,gen,re_index]+re["cAa"][deme...,locus,gen,re_index])/re["stats"]["n_loci"]
+end
+
+function twopq(re,deme,locus::Int,gen=re["stats"]["n_gens"],re_index=1)
+    a = af_A(re,deme,locus,gen,re_index)
+    return a*(1-a)*2
+end
+
+function pbar(re,deme_arr,locus=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1)
+    return sum([af_A(re,deme,locus,gen,re_index)*re["pops"][deme...,gen,re_index] for deme in deme_arr])/sum([re["pops"][deme...,gen,re_index] for deme in deme_arr])
+end
+
+function H_S(re,deme_arr,locus=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1)
+    return sum([twopq(re,deme,locus,gen,re_index)*re["pops"][deme...,gen,re_index] for deme in deme_arr])/sum([re["pops"][deme...,gen,re_index] for deme in deme_arr])
+end
+
+function H_T(re,deme_arr,loci=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1)
+    return mean([2*pbar(re,deme_arr,l)*(1-pbar(re,deme_arr,l)) for l in loci])
+end
+
 function Ne(data,range=:)
     return [harmmean(k[range]) for k in data]
+end
+
+function F_ST(re,deme_arr,loci=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1;verbose=true)
+    HT = H_T(re,deme_arr,loci,gen,re_index)
+    println(HT)
+    HS = H_S(re,deme_arr,loci,gen,re_index)
+    println(HS)
+    return (HT-HS)/HT
 end
 
 function Ne_avcuml(data,n_gens_burnin,range)
