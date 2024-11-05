@@ -108,8 +108,8 @@ function re_heatmap(data::Array, gen_start=1, gen_end=DEF_N_GENS_BURNIN + DEF_N_
         end
     else
 
-        @gif for i in gen_start:(gen_end*slow_factor-1)
-            gen_no = trunc(Int, i / slow_factor) + 1
+        @gif for i in gen_start:(gen_end*slow_factor)
+            gen_no = trunc(Int, i / slow_factor)
 
             if all(isnan, li(data, gen_no))
                 println("No values found in any deme.")
@@ -156,7 +156,7 @@ Shows an animated heatmap of `dataname` in `re` from `gen_start` to `gen_end`.
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap(re::Dict, dataname::String, gen_start=1, gen_end=re["stats"]["n_gens"]; re_index::Int = 1, n_gens_sub=re["stats"]["n_gens_burnin"], slow_factor=1, log_base=-1, defc=false, clim=:default, kwargs...)
+function re_heatmap(re::Dict, dataname::String, gen_start=1, gen_end=size(re[dataname],length(re[dataname])-1); re_index::Int = 1, n_gens_sub=re["stats"]["n_gens_burnin"], slow_factor=1, log_base=-1, defc=false, clim=:default, kwargs...)
     if !isa(re[dataname], Array)
         println("This data was not generated.")
     else

@@ -1,8 +1,8 @@
-using StatsBase, Distributions, Distributed, Random, SpecialFunctions, Serialization, Dates, SharedArrays
+using StatsBase, Distributions, Distributed, Random, SpecialFunctions, Serialization, Dates, DataStructures, ThreadsX
 include("defaults.jl")
 
 
-# Configuration
+# Constants
 # ------------------------------------------------
 
 # Migration probabilities for each dimensionality -> for each mode
@@ -29,9 +29,28 @@ MIGR_DIRS_HEX = [
     [] # 3D
 ]
 
+# Types
+const typ_gt = Array{Array{Array{Bool}}} # Doesn't need to be constant though
+const typ_float = Float32
+const typ_int = Int32
+# Also, what about Array{Array{Array{Bool}},wlddim} !!!
+
 
 # Common functions
 # ------------------------------------------------
+"""
+Returns the maximum in an array ignoring NaNs.
+"""
+function maxdef(a)
+    return maximum(filter(!isnan,a))
+end
+
+"""
+Returns the minimum in an array ignoring NaNs.
+"""
+function mindef(a)
+    return minimum(filter(!isnan,a))
+end
 
 """
 Chooses all values except the specific value `n` at the last dimension.
@@ -381,9 +400,9 @@ Builds the next generation in finite-sites expansions, i.e. advances two world a
 
 ---
 
-`wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays
+`wld_gt1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays
 
-`wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays
+`wld_gt2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays
 
 `wld_stats`: world stats Dict
 
@@ -418,9 +437,9 @@ Builds the next generation in finite-sites expansions, i.e. advances two world a
 
 ---
 
-Output 1: a changed `wld_ms1` = a spatial array of demes that contain individuals' left monosome [Bool] arrays
+Output 1: a changed `wld_gt1` = a spatial array of demes that contain individuals' left monosome [Bool] arrays
 
-Output 2: a changed `wld_ms2` = a spatial array of demes that contain individuals' right monosome [Bool] arrays
+Output 2: a changed `wld_gt2` = a spatial array of demes that contain individuals' right monosome [Bool] arrays
 
 Output 3: a spatial array of demes with average fitness in the new generation
 
@@ -438,90 +457,88 @@ Output 9: a spatial array of demes with average neutral Aa mutation count in the
 
 Output 10: a spatial array of demes with average neutral aa mutation count in the new generation
 """
-function build_next_gen(wld_ms1, wld_ms2, wld_stats, fitn_out=false, pops_out=false, mut_out=false, cnt_out=false;
+function build_next_gen(wld_gt1, wld_gt2, wld_stats, fitn_out=false, pops_out=false, mut_out=false, cnt_out=false;
     max_migr=NaN, migr_mode=DEF_MIGR_MODE, bottleneck=NaN, refl_walls=false, r_max_migr=0, r_coords=[1, 2], mutratelocus=false, relcnt=false)
 
     wlddim = wld_stats["wlddim"]
 
     # Determine the number of offspring for each deme
-    next_gen_posits, next_gen_pops = calc_offspring(wld_ms1, wld_stats)
+    next_gen_posits, next_gen_pops = calc_offspring(wld_gt1, wld_stats)
 
     # Define the world (as an array [=demes] of arrays [=individs] of two Bool arrays [=monosomes]) and the data arrays in the next generation
-    wld_ms1_next = Array{Array{Array{Bool}},wlddim}(undef, wld_stats["max"]...)
-    wld_ms2_next = Array{Array{Array{Bool}},wlddim}(undef, wld_stats["max"]...)
-    mean_fitn_next = NaN
-    pops_next = NaN
-    AA_next = NaN
-    Aa_next = NaN
-    aa_next = NaN
-    cAA_next = NaN
-    cAa_next = NaN
-    caa_next = NaN
+    wld_gt1_next = deepcopy(wld_gt1)
+    wld_gt2_next = deepcopy(wld_gt2)
+    wld_fitn_next = NaN
+    wld_pops_next = NaN
+    wld_AA_next = NaN
+    wld_Aa_next = NaN
+    wld_aa_next = NaN
+    wld_cAA_next = NaN
+    wld_cAa_next = NaN
+    wld_caa_next = NaN
     all_birth_count = 0
 
     # Fill the next generation habitat
     if fitn_out
-        mean_fitn_next = Array{Float32}(undef, wld_stats["max"]...)
-        fill!(mean_fitn_next, NaN)
+        wld_fitn_next = Array{typ_float}(undef, wld_stats["max"]...)
+        fill!(wld_fitn_next, NaN)
     end
     if pops_out
-        pops_next = Array{Float32}(undef, wld_stats["max"]...)
-        fill!(pops_next, NaN)
+        wld_pops_next = Array{typ_float}(undef, wld_stats["max"]...)
+        fill!(wld_pops_next, NaN)
     end
     if cnt_out
-        cAA_next = Array{Float32}(undef, wld_stats["max"]...,wld_stats["n_loci"])
-        cAa_next = Array{Float32}(undef, wld_stats["max"]...,wld_stats["n_loci"])
-        caa_next = Array{Float32}(undef, wld_stats["max"]...,wld_stats["n_loci"])
-        fill!(cAA_next, NaN)
-        fill!(cAa_next, NaN)
-        fill!(caa_next, NaN)
+        wld_cAA_next = Array{typ_int}(undef, wld_stats["max"]...,wld_stats["n_loci"])
+        wld_cAa_next = Array{typ_int}(undef, wld_stats["max"]...,wld_stats["n_loci"])
+        wld_caa_next = Array{typ_int}(undef, wld_stats["max"]...,wld_stats["n_loci"])
+        fill!(wld_cAA_next, NaN)
+        fill!(wld_cAa_next, NaN)
+        fill!(wld_caa_next, NaN)
     end
     if mut_out
-        AA_next = Array{Float32}(undef, wld_stats["max"]...)
-        Aa_next = Array{Float32}(undef, wld_stats["max"]...)
-        aa_next = Array{Float32}(undef, wld_stats["max"]...)
-        fill!(AA_next, NaN)
-        fill!(Aa_next, NaN)
-        fill!(aa_next, NaN)
+        wld_AA_next = Array{typ_float}(undef, wld_stats["max"]...)
+        wld_Aa_next = Array{typ_float}(undef, wld_stats["max"]...)
+        wld_aa_next = Array{typ_float}(undef, wld_stats["max"]...)
+        fill!(wld_AA_next, NaN)
+        fill!(wld_Aa_next, NaN)
+        fill!(wld_aa_next, NaN)
     end
 
-
     for deme in next_gen_posits
-        ms1_at_pos = wld_ms1[deme...]
-        ms2_at_pos = wld_ms2[deme...]
+        ms1_at_pos = wld_gt1[deme...]
+        ms2_at_pos = wld_gt2[deme...]
 
-        fitns = []
+        fitns = [] # Optimize ???
         cAA, cAa, caa, fitns =
             calc_muts_and_fitn_in_deme(ms1_at_pos, ms2_at_pos, wld_stats)
 
         if fitn_out
-            mean_fitn_next[deme...] = mean(fitns)
+            wld_fitn_next[deme...] = mean(fitns)
         end
         if cnt_out
-            for i in 1:wld_stats["n_loci"]
-                cAA_next[deme...,i] = cAA[i]
-                cAa_next[deme...,i] = cAa[i]
-                caa_next[deme...,i] = caa[i]
-            end
+            wld_cAA_next[deme...] = cAA
+            wld_cAa_next[deme...] = cAa
+            wld_caa_next[deme...] = caa
         end
         if mut_out
             lenn = length(ms1_at_pos)
-            AA_next[deme...] = relcnt ? sum(cAA)/lenn/wld_stats["n_loci"] : sum(cAA)/lenn
-            Aa_next[deme...] = relcnt ? sum(cAa)/lenn/wld_stats["n_loci"] : sum(cAa)/lenn
-            aa_next[deme...] = relcnt ? sum(caa)/lenn/wld_stats["n_loci"] : sum(caa)/lenn
+            wld_AA_next[deme...] = relcnt ? sum(cAA)/lenn/wld_stats["n_loci"] : sum(cAA)/lenn
+            wld_Aa_next[deme...] = relcnt ? sum(cAa)/lenn/wld_stats["n_loci"] : sum(cAa)/lenn
+            wld_aa_next[deme...] = relcnt ? sum(caa)/lenn/wld_stats["n_loci"] : sum(caa)/lenn
         end
 
-
+        
         next_generation_size = next_gen_pops[deme...]
 
         if next_generation_size > 0
+            
             birth_count = 0
             for _ in 1:next_generation_size
                 
-                mom_ms1 = wsample(ms1_at_pos, Float32.(fitns))
-                mom_ms2 = wsample(ms2_at_pos, Float32.(fitns))
-                dad_ms1 = wsample(ms1_at_pos, Float32.(fitns))
-                dad_ms2 = wsample(ms2_at_pos, Float32.(fitns))
+                mom_ms1 = wsample(ms1_at_pos, (typ_float).(fitns))
+                mom_ms2 = wsample(ms2_at_pos, (typ_float).(fitns))
+                dad_ms1 = wsample(ms1_at_pos, (typ_float).(fitns))
+                dad_ms2 = wsample(ms2_at_pos, (typ_float).(fitns))
 
                 gamete_mom_ms1 = copy(mom_ms1)
                 gamete_dad_ms1 = copy(dad_ms1)
@@ -537,24 +554,24 @@ function build_next_gen(wld_ms1, wld_ms2, wld_stats, fitn_out=false, pops_out=fa
 
                 indices = [deme[i] + move[i] for i in 1:wlddim]
 
-                if !isassigned(wld_ms1_next, indices...)
-                    wld_ms1_next[indices...] = []
-                    wld_ms2_next[indices...] = []
+                if !isassigned(wld_gt1_next, indices...)
+                    wld_gt1_next[indices...] = []
+                    wld_gt2_next[indices...] = []
                 end
-                push!(wld_ms1_next[indices...], gamete_mom_ms1)
-                push!(wld_ms2_next[indices...], gamete_dad_ms2)
+                push!(wld_gt1_next[indices...], gamete_mom_ms1)
+                push!(wld_gt2_next[indices...], gamete_dad_ms2)
 
                 birth_count += 1
                 all_birth_count += 1
             end
 
             if pops_out
-                pops_next[deme...] = birth_count
+                wld_pops_next[deme...] = birth_count
             end
         end
     end
 
-    return wld_ms1_next, wld_ms2_next, mean_fitn_next, pops_next, AA_next, Aa_next, aa_next, cAA_next, cAa_next, caa_next
+    return wld_gt1_next, wld_gt2_next, wld_fitn_next, wld_pops_next, wld_AA_next, wld_Aa_next, wld_aa_next, wld_cAA_next, wld_cAa_next, wld_caa_next
 end
 
 """
@@ -607,14 +624,14 @@ function create_empty_world(max::Tuple=(DEF_X_MAX, DEF_Y_MAX); name::String=Date
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS,
     prolif_rate=DEF_PROLIF_RATE, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci))
 
-    wld_ms1 = Array{Array{Array{Bool}}}(undef, max...) # array of left (in a pair) monosomes ("ms") of all individuals in space
-    wld_ms2 = Array{Array{Array{Bool}}}(undef, max...) # array of right (in a pair) monosomes ("ms") of all individuals in space
+    wld_gt1 = (typ_gt)(undef, max...) # array of left (in a pair) monosomes ("ms") of all individuals in space
+    wld_gt2 = (typ_gt)(undef, max...) # array of right (in a pair) monosomes ("ms") of all individuals in space
     for k in Iterators.product([1:n for n in max]...)
-        wld_ms1[k...] = Array{Bool,1}[]
-        wld_ms2[k...] = Array{Bool,1}[]
+        wld_gt1[k...] = Array{Bool,1}[]
+        wld_gt2[k...] = Array{Bool,1}[]
     end
 
-    wld_stats = Dict(
+    wld_stats = OrderedDict(
         "name" => name,
         #"min" => min,
         "max" => max,
@@ -633,7 +650,7 @@ function create_empty_world(max::Tuple=(DEF_X_MAX, DEF_Y_MAX); name::String=Date
         #"rangeexps" => []
     )
 
-    return wld_ms1, wld_ms2, wld_stats
+    return wld_gt1, wld_gt2, wld_stats
 end
 
 """
@@ -641,9 +658,9 @@ Fills random demes within given monosome arrays with finite-sites individuals. U
 
 ---
 
-`wld_ms1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays
+`wld_gt1`: a spatial array of demes that contain individuals' left monosome [Bool] arrays
 
-`wld_ms2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays
+`wld_gt2`: a spatial array of demes that contain individuals' right monosome [Bool] arrays
 
 `wld_stats`: world stats Dict
 
@@ -652,20 +669,20 @@ Fills random demes within given monosome arrays with finite-sites individuals. U
 `n_demes_to_fill`: number of demes to fill
 
 """
-function fill_random_demes(wld_ms1, wld_ms2, wld_stats, fill::Vector{UnitRange{Int64}}, n_demes_to_fill=DEF_N_DEMES_STARTFILL) # ::Array{Array{Array{Bool}}}
+function fill_random_demes(wld_gt1, wld_gt2, wld_stats, fill::Vector{UnitRange{Int64}}, n_demes_to_fill=DEF_N_DEMES_STARTFILL; redims=NaN) # ::Array{Array{Array{Bool}}}
 
     possible_init_coords = [collect(x) for x in Iterators.product(fill...)]
     init_coords = sample(possible_init_coords, n_demes_to_fill; replace=false)
     wld_stats["sel_loci"] = randperm(wld_stats["n_loci"])[1:wld_stats["n_sel_loci"]]
 
     for coord in init_coords
-        if !isassigned(wld_ms1, coord...)
-            wld_ms1[coord...] = []
-            wld_ms2[coord...] = []
+        if !isassigned(wld_gt1, coord...)
+            wld_gt1[coord...,redims...] = []
+            wld_gt2[coord...,redims...] = []
         end
         for _ in 1:wld_stats["capacity"]
-            push!(wld_ms1[coord...], falses(wld_stats["n_loci"]))
-            push!(wld_ms2[coord...], falses(wld_stats["n_loci"]))
+            push!(wld_gt1[coord...,redims...], falses(wld_stats["n_loci"]))
+            push!(wld_gt2[coord...,redims...], falses(wld_stats["n_loci"]))
         end
     end
 
@@ -703,8 +720,8 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 `data_to_generate`: string of letters representing different data to output. Possible values:
 - **F** - deme-average fitness (**fitn**)
 - **P** - deme populations (**pops**)
-- **S** - deme-average number of homo- and heterozygous selected loci (**AAsel**, **Aasel** and **aasel**)
-- **N** - deme-average number of homo- and heterozygous neutral loci (**AAneu**, **Aaneu** and **aaneu**)
+- **C** - sum of homo- and heterozygous loci counts in a deme (**cAA**, **cAa** and **caa**)
+- **M** - deme-average number of homo- and heterozygous neutral loci (**AAneu**, **Aaneu** and **aaneu**)
 
 `name`: world name
 
@@ -726,9 +743,9 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 
 If starting from existing world, also provide:
 
-`wld_ms1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
+`wld_gt1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
 
-`wld_ms2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
+`wld_gt2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
 
 `wld_stats`: world stats Dict
 
@@ -738,19 +755,10 @@ Output: a Dict containing data after the expansion:
 - **stats** - statistics array containing world and range expansion information
 - **fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
-function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), max=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
+function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), maxi=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, r_coords=[1, 2], capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci), mutratelocus=false,
-    startfill_range=NaN, distributed=true, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN)
-
-    fitn_wld = []
-    pops_wld = []
-    AA_wld = []
-    Aa_wld = []
-    aa_wld = []
-    cAA_wld = []
-    cAa_wld = []
-    caa_wld = []
+    startfill_range=NaN, distributed=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN)
 
     #= if n_re>1
         procs = addprocs(n_re)
@@ -758,94 +766,101 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
             @spawnat procs[k] include("../resk.jl")
         end
     end =#
-    
-    if !(wld_ms1 isa Array{Array{Array{Bool}}})
-        #println("No world provided. Creating a new world.")
-        wld_ms1, wld_ms2, wld_stats = create_empty_world(max; name=name, capacity=capacity, prolif_rate=prolif_rate, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
-            mut_rate=mut_rate, migr_rate=migr_rate, migr_mode=migr_mode, sel_coef=sel_coef, domin_coef=domin_coef)
-        if !isa(startfill_range, Array) && !any(isnan, max_burnin)
-            startfill_range = [1:upper for upper in max_burnin]
-        end
 
-        wld_ms1 = [copy(wld_ms1) for j in 1:n_re]
-        wld_ms2 = [copy(wld_ms2) for j in 1:n_re]
-        for j in 1:n_re
-            fill_random_demes(wld_ms1[j], wld_ms2[j], wld_stats, startfill_range)
-        end
-    else
-        wld_ms1 = [copy(wld_ms1) for j in 1:n_re]
-        wld_ms2 = [copy(wld_ms2) for j in 1:n_re]
-    end
-
-    wlddim = wld_stats["wlddim"]
-    n_gens = n_gens_burnin + n_gens_exp
-
-    fitn_out = false
-    pops_out = false
-    mut_out = false
-    cnt_out = false
-
-    if occursin("F", data_to_generate)
-        fitn_out = true
-        fitn_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
-    end
-    if occursin("P", data_to_generate)
-        pops_out = true
-        pops_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
-    end
-    if occursin("C", data_to_generate)
-        cnt_out = true
-        cAA_wld = SharedArray{Float32}(wld_stats["max"]..., wld_stats["n_loci"], n_gens, n_re)
-        cAa_wld = SharedArray{Float32}(wld_stats["max"]..., wld_stats["n_loci"], n_gens, n_re)
-        caa_wld = SharedArray{Float32}(wld_stats["max"]..., wld_stats["n_loci"], n_gens, n_re)
-    end
-    if occursin("M", data_to_generate)
-        mut_out = true
-        AA_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
-        Aa_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
-        aa_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
-    end
-
-
-    if n_re>1 && distributed
-        
-        @sync begin
-            @inbounds for j in 1:n_re
-                @spawn begin
-                    for g in 1:n_gens
-                        if g <= n_gens_burnin
-                            max_migr = max_burnin
-                            r_max_migr = r_max_burnin
-                        else
-                            max_migr = max_exp
-                            r_max_migr = r_max_exp
-                        end
-                        wld_ms1[j], wld_ms2[j], fitn_next, pops_next, AA_next, Aa_next, aa_next, cAA_next, cAa_next, caa_next = build_next_gen(wld_ms1[j], wld_ms2[j], wld_stats, 
-                            fitn_out, pops_out, mut_out, cnt_out;
-                            max_migr=max_migr, migr_mode=migr_mode, bottleneck=bottleneck, r_max_migr=r_max_migr, r_coords=r_coords, mutratelocus=mutratelocus)
-                        if fitn_out
-                            fitn_wld[repeat([:],wlddim)...,g,j] = fitn_next
-                        end
-                        if pops_out
-                            pops_wld[repeat([:],wlddim)...,g,j] = pops_next
-                        end
-                        if cnt_out
-                            cAA_wld[repeat([:],wlddim+1)...,g,j] = cAA_next
-                            cAa_wld[repeat([:],wlddim+1)...,g,j] = cAa_next
-                            caa_wld[repeat([:],wlddim+1)...,g,j] = caa_next
-                        end
-                        if mut_out
-                            AA_wld[repeat([:],wlddim)...,g,j] = AA_next
-                            Aa_wld[repeat([:],wlddim)...,g,j] = Aa_next
-                            aa_wld[repeat([:],wlddim)...,g,j] = aa_next
+#=     function distribute_task(tsk)
+        if n_re>1 && distributed
+            @sync begin
+                @inbounds for j in 1:n_re
+                    @spawn begin
+                        for g in 1:n_gens
+                            tsk(g,j)
                         end
                     end
                 end
             end
+            #rmprocs(n_re)
+        else
+            @inbounds for j in 1:n_re, g in 1:n_gens
+                tsk(g,j)
+            end
         end
-        #rmprocs(n_re)
-    else
-        @inbounds for j in 1:n_re, g in 1:n_gens
+    end =#
+    
+    if isnan(wld_gt1)
+        is_fill_random_demes = true
+        #println("No world provided. Creating a new world.")
+        wld_gt1, wld_gt2, wld_stats = create_empty_world(maxi; name=name, capacity=capacity, prolif_rate=prolif_rate, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
+            mut_rate=mut_rate, migr_rate=migr_rate, migr_mode=migr_mode, sel_coef=sel_coef, domin_coef=domin_coef)
+        if !isa(startfill_range, Array) && !any(isnan, max_burnin)
+            startfill_range = [1:upper for upper in max_burnin]
+        end
+    end
+
+    wlddim = wld_stats["wlddim"]
+    wld_stats["max_burnin"] = max_burnin
+    wld_stats["max_exp"] = max_exp
+    wld_stats["n_gens_burnin"] = n_gens_burnin
+    wld_stats["n_gens_exp"] = n_gens_exp
+    n_gens = n_gens_burnin + n_gens_exp
+    wld_stats["n_gens"] = n_gens
+
+    function check_what_output(letter)
+        return (occursin(letter, data_to_generate),occursin(letter*"l", data_to_generate))
+    end
+    out_fields = OrderedDict{String, Any}("gt1" => check_what_output("G"), "gt2" => check_what_output("G"), "fitn" => check_what_output("F"), "pops" => check_what_output("P"),
+        "cnt" => check_what_output("C"), "muts" => check_what_output("M"))
+
+
+#=     if occursin("C", data_to_generate)
+        cnt_out = true
+        cond_n_gens = occursin("Cl", data_to_generate) ? 1 : n_gens
+        rewld_cAA = Array{Array{Float32}}(wld_stats["max"]..., cond_n_gens, n_re) # (wld_stats["max"]..., wld_stats["n_loci"], cond_n_gens, n_re)
+        rewld_cAa = Array{Array{Float32}}(wld_stats["max"]..., cond_n_gens, n_re)
+        rewld_caa = Array{Array{Float32}}(wld_stats["max"]..., cond_n_gens, n_re)
+    end
+    if occursin("M", data_to_generate)
+        mut_out = true
+        cond_n_gens = occursin("Ml", data_to_generate) ? 1 : n_gens
+        rewld_AA = Array{Float32}(wld_stats["max"]..., cond_n_gens, n_re)
+        rewld_Aa = Array{Float32}(wld_stats["max"]..., cond_n_gens, n_re)
+        rewld_aa = Array{Float32}(wld_stats["max"]..., cond_n_gens, n_re)
+    end =#
+
+    function tsk_re()
+
+        cond_n_gens = out_fields["gt1"][2] ? 1 : n_gens
+        rewld_gt1_local = (typ_gt)(undef, wld_stats["max"]..., cond_n_gens)
+        rewld_gt2_local = (typ_gt)(undef, wld_stats["max"]..., cond_n_gens)
+
+        rewld_gt1_local[repeat([:],wlddim)...,1] = deepcopy(wld_gt1)
+        rewld_gt2_local[repeat([:],wlddim)...,1] = deepcopy(wld_gt2)
+        if is_fill_random_demes
+            fill_random_demes(rewld_gt1_local, rewld_gt2_local, wld_stats, startfill_range; redims=(1))
+        end
+        
+        if out_fields["fitn"][1]
+            cond_n_gens = out_fields["fitn"][2] ? 1 : n_gens
+            rewld_fitn_local = Array{typ_float}(undef, wld_stats["max"]..., cond_n_gens)
+            fill!(rewld_fitn_local,NaN)
+        else
+            rewld_fitn_local = NaN
+        end
+        if out_fields["pops"][1]
+            cond_n_gens = out_fields["pops"][2] ? 1 : n_gens
+            rewld_pops_local = Array{typ_float}(undef, wld_stats["max"]..., cond_n_gens)
+            fill!(rewld_pops_local,NaN)
+        else
+            rewld_pops_local = NaN
+        end
+        if out_fields["muts"][1]
+            cond_n_gens = out_fields["muts"][2] ? 1 : n_gens
+            rewld_muts_local = Array{typ_float}(undef, wld_stats["max"]..., cond_n_gens)
+            fill!(rewld_muts_local,NaN)
+        else
+            rewld_muts_local = NaN
+        end
+
+        @inbounds for g in 1:n_gens
             if g <= n_gens_burnin
                 max_migr = max_burnin
                 r_max_migr = r_max_burnin
@@ -853,27 +868,57 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
                 max_migr = max_exp
                 r_max_migr = r_max_exp
             end
-            wld_ms1[j], wld_ms2[j], fitn_next, pops_next, AA_next, Aa_next, aa_next, cAA_next, cAa_next, caa_next = build_next_gen(wld_ms1[j], wld_ms2[j], wld_stats,
-                fitn_out, pops_out, mut_out, cnt_out;
+
+            condi = out_fields["gt1"][1] && !out_fields["gt1"][2]
+            gg = condi ? g : 1
+
+            wld_gt1_next, wld_gt2_next, wld_fitn_next, wld_pops_next, AA_next, Aa_next, aa_next, cAA_next, cAa_next, caa_next = build_next_gen(
+                rewld_gt1_local[repeat([:],wlddim)...,max(gg-1,1)], rewld_gt2_local[repeat([:],wlddim)...,max(gg-1,1)], wld_stats, 
+                out_fields["fitn"][1], out_fields["pops"][1], out_fields["muts"][1], out_fields["cnt"][1];
                 max_migr=max_migr, migr_mode=migr_mode, bottleneck=bottleneck, r_max_migr=r_max_migr, r_coords=r_coords, mutratelocus=mutratelocus)
-            if fitn_out
-                fitn_wld[repeat([:],wlddim)...,g,j] = fitn_next
+
+            #print(wld_gt1_next)
+            rewld_gt1_local[repeat([:],wlddim)...,gg] = wld_gt1_next
+            rewld_gt2_local[repeat([:],wlddim)...,gg] = wld_gt2_next
+
+            if out_fields["fitn"][1]
+                if out_fields["fitn"][2]
+                    rewld_fitn_local[repeat([:],wlddim)...,g] = wld_fitn_next
+                elseif g == n_gens
+                    rewld_fitn_local[repeat([:],wlddim)...,1] = wld_fitn_next
+                end
             end
-            if pops_out
-                pops_wld[repeat([:],wlddim)...,g,j] = pops_next
-            end
-            if cnt_out
-                cAA_wld[repeat([:],wlddim+1)...,g,j] = cAA_next
-                cAa_wld[repeat([:],wlddim+1)...,g,j] = cAa_next
-                caa_wld[repeat([:],wlddim+1)...,g,j] = caa_next
-            end
-            if mut_out
-                AA_wld[repeat([:],wlddim)...,g,j] = AA_next
-                Aa_wld[repeat([:],wlddim)...,g,j] = Aa_next
-                aa_wld[repeat([:],wlddim)...,g,j] = aa_next
+            if out_fields["pops"][1]
+                if out_fields["pops"][2]
+                    rewld_pops_local[repeat([:],wlddim)...,g] = wld_pops_next
+                elseif g == n_gens
+                    rewld_pops_local[repeat([:],wlddim)...,1] = wld_pops_next
+                end
             end
         end
+
+        return Dict{String, Any}("gt1" => rewld_gt1_local, "gt2" => rewld_gt2_local, "fitn" => rewld_fitn_local, "pops" => rewld_pops_local, "muts" => rewld_muts_local)
     end
+
+    #distribute_task(tsk_buildnextgen)
+
+    if n_re > 1
+        if distributed
+            #temp_procs = addprocs(n_re-1)
+            #for k in temp_procs
+            #    @spawnat k include("../resk.jl")
+            #end
+            dicts_out = pmap(tsk_re, 1:nprocs()) #dicts_out = pmap(p -> (include("../resk.jl");tsk_re()), 1:nprocs())
+            #rmprocs(temp_procs)
+            #println(nprocs())
+
+        else
+            dicts_out = ThreadsX.map(p->tsk_re(), 1:n_re)
+        end
+    else
+        dicts_out = [tsk_re()]
+    end
+
 
     #= append!(wld_stats["rangeexps"],Dict(
         "x_max_burnin" => x_max_burnin,
@@ -881,11 +926,6 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
         "n_gens_burnin" => n_gens_burnin,
         "n_gens_exp" => n_gens_exp,
         "n_gens" => n_gens)) =#
-    wld_stats["max_burnin"] = max_burnin
-    wld_stats["max_exp"] = max_exp
-    wld_stats["n_gens_burnin"] = n_gens_burnin
-    wld_stats["n_gens_exp"] = n_gens_exp
-    wld_stats["n_gens"] = n_gens
 
     #= res = []
     function needed_data(symb,arr,res)
@@ -893,11 +933,26 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
             push!(res,Ref(arr))
         end
     end
-    needed_data("P",pops_wld) =#
+    needed_data("P",wld_pops) =#
+    res = OrderedDict{String, Any}("stats" => wld_stats)#, "fitn" => [], "pops" => [],
+    #    "AA" => [], "Aa" => [], "aa" => [],
+    #    "cAA" => [], "cAa" => [], "caa" => [], "gt" => ([],[]))
 
-    return Dict("stats" => wld_stats, "fitn" => Array(fitn_wld), "pops" => Array(pops_wld),
-        "AA" => Array(AA_wld), "Aa" => Array(Aa_wld), "aa" => Array(aa_wld),
-        "cAA" => Array(cAA_wld), "cAa" => Array(cAa_wld), "caa" => Array(caa_wld))
+    for key in keys(out_fields)
+        if out_fields[key][1]
+            res[key] = cat([dictus[key] for dictus in dicts_out]...,dims=wlddim+2)
+        end
+    end
+
+#=     res["pops"] = wld_pops
+    res["cAA"] = wld_cAA
+    res["cAa"] = wld_cAa
+    res["caa"] = wld_caa
+    res["AA"] = wld_AA
+    res["Aa"] = wld_Aa
+    res["aa"] = wld_aa =#
+
+    return res
 end
 
 """
@@ -943,9 +998,9 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 
 If starting from existing world, also provide:
 
-`wld_ms1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
+`wld_gt1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
 
-`wld_ms2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
+`wld_gt2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
 
 `wld_stats`: world stats Dict
 
@@ -957,23 +1012,23 @@ Output: a Dict containing data after the expansion:
 """
 function rangeexp_ray(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; x_max_burnin=DEF_X_MAX_BURNIN, x_max_exp=DEF_X_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, distributed=true, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN, capacity=DEF_CAPACITY)
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, distributed=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, capacity=DEF_CAPACITY)
 
-    rangeexp(n_gens_burnin, n_gens_exp, n_re; max_burnin=(x_max_burnin,), max_exp=(x_max_exp,), max=(x_max_exp,), startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
+    rangeexp(n_gens_burnin, n_gens_exp, n_re; max_burnin=(x_max_burnin,), max_exp=(x_max_exp,), maxi=(x_max_exp,), startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_ms1=wld_ms1, wld_ms2=wld_ms2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, distributed=distributed)
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, distributed=distributed)
 end
 
 const rangeexp_1d = rangeexp_ray
 
-function rangeexp_linear(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, max=(r_max_exp * 2 + 1,), 
+function rangeexp_linear(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, maxi=(r_max_exp * 2 + 1,), 
     migr_mode=DEF_MIGR_MODE, startfill_range=[(1-ceil(Int,r_max_burnin/2)+r_max_exp):(1+ceil(Int,r_max_burnin/2)+r_max_exp)], prolif_rate=DEF_PROLIF_RATE, max_exp=NaN, max_burnin=NaN,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, distributed=true, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN, capacity=DEF_CAPACITY)
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, distributed=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, capacity=DEF_CAPACITY)
 
-    rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, max=max, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
+    rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci, r_coords=[1],
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_ms1=wld_ms1, wld_ms2=wld_ms2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, distributed=distributed)
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, distributed=distributed)
 end
 
 
@@ -1018,9 +1073,9 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 
 If starting from existing world, also provide:
 
-`wld_ms1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
+`wld_gt1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
 
-`wld_ms2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
+`wld_gt2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
 
 `wld_stats`: world stats Dict
 
@@ -1041,11 +1096,11 @@ Output: a Dict containing data after the expansion:
 function rangeexp_strip(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; x_max_burnin=DEF_X_MAX_BURNIN, x_max_exp=DEF_X_MAX_EXP, y_max=DEF_Y_MAX, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=("midhole at x=", x_max_burnin * 2), prolif_rate=DEF_PROLIF_RATE,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, capacity=DEF_CAPACITY, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN, max_burnin=(x_max_burnin, y_max), max_exp=(x_max_exp, y_max), max=(x_max_exp, y_max))
+    wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, max_burnin=(x_max_burnin, y_max), max_exp=(x_max_exp, y_max), maxi=(x_max_exp, y_max), distributed=true)
 
-    rangeexp(n_gens_burnin, n_gens_exp, n_re; max_burnin=max_burnin, max_exp=max_exp, max=max, startfill_range=startfill_range, prolif_rate=prolif_rate,
+    rangeexp(n_gens_burnin, n_gens_exp, n_re; max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, startfill_range=startfill_range, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, capacity=capacity, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_ms1=wld_ms1, wld_ms2=wld_ms2, wld_stats=wld_stats, name=name, bottleneck=bottleneck)
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, distributed=distributed)
 end
 
 """
@@ -1087,9 +1142,9 @@ If no world is provided, generates a world and seeds it with `DEF_N_DEMES_STARTF
 
 If starting from existing world, also provide:
 
-`wld_ms1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
+`wld_gt1`: a spatial array of demes that contain individuals, each of which is a Bool array representing left monosomes
 
-`wld_ms2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
+`wld_gt2`: a spatial array of demes that contain individuals, each of which is a Bool array representing right monosomes
 
 `wld_stats`: world stats Dict
 
@@ -1108,48 +1163,48 @@ Output: a Dict containing data after the expansion:
 - **fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
 function rangeexp_disk(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
-    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1), capacity=DEF_CAPACITY,
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1), capacity=DEF_CAPACITY,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    max_exp=NaN, max_burnin=NaN, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN)
+    max_exp=NaN, max_burnin=NaN, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN)
 
     if !isa(startfill_range, Array)
         ran = ins_sq(r_max_burnin, r_max_exp)
         startfill_range = [ran, ran]
     end
 
-    rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, max=max, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
+    rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_ms1=wld_ms1, wld_ms2=wld_ms2, wld_stats=wld_stats, name=name, bottleneck=bottleneck)
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck)
 end
 
 function rangeexp_cylinder(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
-    z_max_burnin=DEF_X_MAX_BURNIN, z_max_exp=DEF_X_MAX_EXP, max_burnin=(NaN, NaN, z_max_burnin), max_exp=(NaN, NaN, z_max_exp), max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp), capacity=DEF_CAPACITY,
+    z_max_burnin=DEF_X_MAX_BURNIN, z_max_exp=DEF_X_MAX_EXP, max_burnin=(NaN, NaN, z_max_burnin), max_exp=(NaN, NaN, z_max_exp), maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp), capacity=DEF_CAPACITY,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    data_to_generate=DEF_DATA_TO_GENERATE, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)
+    data_to_generate=DEF_DATA_TO_GENERATE, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)
 
     if !isa(startfill_range, Array)
         ran = ins_sq(r_max_burnin, r_max_exp)
         startfill_range = [ran, ran, 1:z_max_burnin]
     end
 
-    rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, max=max,
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_ms1=wld_ms1, wld_ms2=wld_ms2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, capacity=capacity, prolif_rate=prolif_rate,
+    rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi,
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
         startfill_range=startfill_range)
 end
 
 function rangeexp_sphere(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
-    max_burnin=NaN, max_exp=NaN, max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE,
+    max_burnin=NaN, max_exp=NaN, maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    data_to_generate=DEF_DATA_TO_GENERATE, wld_ms1=NaN, wld_ms2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)
+    data_to_generate=DEF_DATA_TO_GENERATE, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)
 
     if !isa(startfill_range, Array)
         ran = ins_cb(r_max_burnin, r_max_exp)
         startfill_range = [ran, ran, ran]
     end
 
-    rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, max=max, r_coords=[1, 2, 3], prolif_rate=prolif_rate,
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_ms1=wld_ms1, wld_ms2=wld_ms2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, capacity=capacity,
+    rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, r_coords=[1, 2, 3], prolif_rate=prolif_rate,
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, capacity=capacity,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
         startfill_range=startfill_range)
 end
@@ -1298,7 +1353,7 @@ Output 4: a spatial array of demes with average deleterious mutation count in th
 
 Output 5: a spatial array of demes with average beneficial mutation count in the new generation
 """
-function build_next_gen_inf(wld::Array{Array{Array{Float32}}}, wld_stats, fitn_out=false, pops_out=false, mut_out=false;
+function build_next_gen_inf(wld::Array{Array{Array{typ_float}}}, wld_stats, fitn_out=false, pops_out=false, mut_out=false;
     max_migr=NaN, migr_mode=DEF_MIGR_MODE, bottleneck=NaN, refl_walls=false, r_max_migr=0, r_coords=[1, 2], weightfitn=true, condsel=false, fixed_mate=false, premutate=false)
 
     wlddim = wld_stats["wlddim"]
@@ -1307,8 +1362,8 @@ function build_next_gen_inf(wld::Array{Array{Array{Float32}}}, wld_stats, fitn_o
     next_gen_posits, next_gen_pops = calc_offspring(wld, wld_stats)
     
     # Define the habitat (world) and the data arrays in the next generation
-    wld_next = Array{Array{Array{Float32}},wlddim}(undef, wld_stats["max"]...)
-    mean_fitn_next = NaN
+    wld_next = Array{Array{Array{typ_float}},wlddim}(undef, wld_stats["max"]...)
+    wld_fitn_next = NaN
     pops_next = NaN
     muts_del_next = NaN
     muts_ben_next = NaN
@@ -1316,16 +1371,16 @@ function build_next_gen_inf(wld::Array{Array{Array{Float32}}}, wld_stats, fitn_o
 
     # Fill the next generation habitat
     if fitn_out
-        mean_fitn_next = Array{Float32}(undef, wld_stats["max"]...)
-        fill!(mean_fitn_next, NaN)
+        wld_fitn_next = Array{typ_float}(undef, wld_stats["max"]...)
+        fill!(wld_fitn_next, NaN)
     end
     if pops_out
-        pops_next = Array{Float32}(undef, wld_stats["max"]...)
+        pops_next = Array{typ_float}(undef, wld_stats["max"]...)
         fill!(pops_next, NaN)
     end
     if mut_out
-        muts_del_next = Array{Float32}(undef, wld_stats["max"]...)
-        muts_ben_next = Array{Float32}(undef, wld_stats["max"]...)
+        muts_del_next = Array{typ_float}(undef, wld_stats["max"]...)
+        muts_ben_next = Array{typ_float}(undef, wld_stats["max"]...)
         fill!(muts_del_next, NaN)
         fill!(muts_ben_next, NaN)
     end
@@ -1336,7 +1391,7 @@ function build_next_gen_inf(wld::Array{Array{Array{Float32}}}, wld_stats, fitn_o
         fitns = prod.(inds_at_pos)
 
         if fitn_out
-            mean_fitn_next[deme...] = mean(fitns)
+            wld_fitn_next[deme...] = mean(fitns)
         end
 
         next_generation_size = next_gen_pops[deme...]
@@ -1396,7 +1451,7 @@ function build_next_gen_inf(wld::Array{Array{Array{Float32}}}, wld_stats, fitn_o
         end
     end
 
-    return wld_next, mean_fitn_next, pops_next, muts_del_next, muts_ben_next
+    return wld_next, wld_fitn_next, pops_next, muts_del_next, muts_ben_next
 end
 
 """
@@ -1438,18 +1493,18 @@ Output 1: a spatial array of demes that contain individuals' segr. regions [Floa
 Output 2: world stats Dict
 
 """
-function create_empty_world_inf(max=(DEF_X_MAX, DEF_Y_MAX); min=(1, 1), name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), capacity=DEF_CAPACITY,
+function create_empty_world_inf(maxi=(DEF_X_MAX, DEF_Y_MAX); min=(1, 1), name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), capacity=DEF_CAPACITY,
     prolif_rate=DEF_PROLIF_RATE, n_segr_regions=DEF_N_SEGR_REGIONS,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS)
 
-    wld = Array{Array{Array{Float32}}}(undef, max...) # array of fitness values of all individuals in space
-    for k in Iterators.product([1:n for n in max]...)
-        wld[k...] = Array{Float32,1}[]
+    wld = Array{Array{Array{typ_float}}}(undef, maxi...) # array of fitness values of all individuals in space
+    for k in Iterators.product([1:n for n in maxi]...)
+        wld[k...] = Array{typ_float,1}[]
     end
 
     wld_stats = Dict(
         "name" => name,
-        "max" => max,
+        "max" => maxi,
         "capacity" => capacity,
         "prolif_rate" => prolif_rate,
         "n_segr_regions" => n_segr_regions,
@@ -1458,7 +1513,7 @@ function create_empty_world_inf(max=(DEF_X_MAX, DEF_Y_MAX); min=(1, 1), name=Dat
         "migr_mode" => migr_mode,
         "sel_coef" => sel_coef,
         "prop_of_del_muts" => prop_of_del_muts,
-        "wlddim" => length(max)
+        "wlddim" => length(maxi)
         #"rangeexps" => []
     )
 
@@ -1479,7 +1534,7 @@ Fills random demes within given monosome arrays with infinite-sites individuals.
 `n_demes_to_fill`: number of demes to fill
 
 """
-function fill_random_demes_inf(wld::Array{Array{Array{Float32}}}, wld_stats, fill::Vector{UnitRange{Int64}}, n_demes_to_fill=DEF_N_DEMES_STARTFILL)
+function fill_random_demes_inf(wld::Array{Array{Array{typ_float}}}, wld_stats, fill::Vector{UnitRange{Int64}}, n_demes_to_fill=DEF_N_DEMES_STARTFILL)
 
     possible_init_coords = [collect(x) for x in Iterators.product(fill...)]
     init_coords = sample(possible_init_coords, n_demes_to_fill; replace=false)
@@ -1556,20 +1611,20 @@ Output: a Dict containing data after the expansion:
 - **stats** - statistics array containing world and range expansion information
 - **fitn**, **pops**, **del**, **ben** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
-function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), max=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
+function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), maxi=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, 
     n_segr_regions=DEF_N_SEGR_REGIONS,
     distributed=true, weightfitn=true, condsel=false, fixed_mate=false, premutate=false,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, r_coords=[1, 2], startfill_range=NaN, wld=NaN, wld_stats=NaN)
 
-    fitn_wld = Array{Float32}(undef,0)
-    pops_wld = Array{Float32}(undef,0)
-    muts_del_wld = Array{Float32}(undef,0)
-    muts_ben_wld = Array{Float32}(undef,0)
+    wld_fitn = Array{typ_float}(undef,0)
+    wld_pops = Array{typ_float}(undef,0)
+    muts_del_wld = Array{typ_float}(undef,0)
+    muts_ben_wld = Array{typ_float}(undef,0)
 
-    if !(wld isa Array{Array{Array{Float32}}})
+    if !(wld isa Array{Array{Array{typ_float}}})
         #println("No world provided. Creating a new world.")
-        wld, wld_stats = create_empty_world_inf(max; name=name, capacity=capacity, prolif_rate=prolif_rate, mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts,
+        wld, wld_stats = create_empty_world_inf(maxi; name=name, capacity=capacity, prolif_rate=prolif_rate, mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts,
             n_segr_regions=n_segr_regions)
         if !isa(startfill_range, Array) && !any(isnan, max_burnin)
             startfill_range = [1:upper for upper in max_burnin]
@@ -1591,16 +1646,16 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
     mut_out = false
     if occursin("F", data_to_generate)
         fitn_out = true
-        fitn_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
+        wld_fitn = Array{typ_float}(wld_stats["max"]..., n_gens, n_re)
     end
     if occursin("P", data_to_generate)
         pops_out = true
-        pops_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
+        wld_pops = Array{typ_float}(wld_stats["max"]..., n_gens, n_re)
     end
     if occursin("M", data_to_generate)
         mut_out = true
-        muts_del_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
-        muts_ben_wld = SharedArray{Float32}(wld_stats["max"]..., n_gens, n_re)
+        muts_del_wld = Array{typ_float}(wld_stats["max"]..., n_gens, n_re)
+        muts_ben_wld = Array{typ_float}(wld_stats["max"]..., n_gens, n_re)
     end
 
     if n_re>1 && distributed
@@ -1621,10 +1676,10 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
                             max_migr=max_migr, migr_mode=migr_mode, bottleneck=bottleneck, r_max_migr=r_max_migr, r_coords=r_coords, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, premutate=premutate)
                         
                         if fitn_out
-                            fitn_wld[repeat([:],wlddim)...,g,j] = fitn_next
+                            wld_fitn[repeat([:],wlddim)...,g,j] = fitn_next
                         end
                         if pops_out
-                            pops_wld[repeat([:],wlddim)...,g,j] = pops_next
+                            wld_pops[repeat([:],wlddim)...,g,j] = pops_next
                         end
                         if mut_out
                             muts_del_wld[repeat([:],wlddim)...,g,j] = muts_del_next
@@ -1652,10 +1707,10 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
             #println("B"*string(rand()))
 
             if fitn_out
-                fitn_wld[repeat([:],wlddim)...,g,j] = fitn_next
+                wld_fitn[repeat([:],wlddim)...,g,j] = fitn_next
             end
             if pops_out
-                pops_wld[repeat([:],wlddim)...,g,j] = pops_next
+                wld_pops[repeat([:],wlddim)...,g,j] = pops_next
             end
             if mut_out
                 muts_del_wld[repeat([:],wlddim)...,g,j] = muts_del_next
@@ -1670,7 +1725,7 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
     wld_stats["n_gens_exp"] = n_gens_exp
     wld_stats["n_gens"] = n_gens
 
-    return Dict("stats" => wld_stats, "fitn" => Array(fitn_wld), "pops" => Array(pops_wld), "del" => Array(muts_del_wld), "ben" => Array(muts_ben_wld))
+    return Dict("stats" => wld_stats, "fitn" => Array(wld_fitn), "pops" => Array(wld_pops), "del" => Array(muts_del_wld), "ben" => Array(muts_ben_wld))
 end
 
 
@@ -1730,19 +1785,19 @@ function rangeexp_ray_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, premutate=false, n_segr_regions=DEF_N_SEGR_REGIONS,
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, distributed=true, wld=NaN, wld_stats=NaN, capacity=DEF_CAPACITY)
 
-    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; max_burnin=(x_max_burnin,), max_exp=(x_max_exp,), max=(x_max_exp,), startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
+    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; max_burnin=(x_max_burnin,), max_exp=(x_max_exp,), maxi=(x_max_exp,), startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, premutate=premutate, n_segr_regions=n_segr_regions,
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck, distributed=distributed)
 end
 
 const rangeexp_1d_inf = rangeexp_ray_inf
 
-function rangeexp_linear_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, max=(r_max_exp * 2 + 1,),
+function rangeexp_linear_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, maxi=(r_max_exp * 2 + 1,),
     migr_mode=DEF_MIGR_MODE, startfill_range=[(1-ceil(Int,r_max_burnin/2)+r_max_exp):(1+ceil(Int,r_max_burnin/2)+r_max_exp)], prolif_rate=DEF_PROLIF_RATE, max_exp=NaN, max_burnin=NaN,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, premutate=false, n_segr_regions=DEF_N_SEGR_REGIONS,
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, distributed=true, wld=NaN, wld_stats=NaN, capacity=DEF_CAPACITY)
 
-    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, max=max, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
+    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, premutate=premutate, n_segr_regions=n_segr_regions, 
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck, distributed=distributed, r_coords=[1])
 end
@@ -1806,16 +1861,16 @@ Output: a Dict containing data after the expansion:
 - **fitn**, **pops**, **del**, **ben** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
 function rangeexp_strip_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; x_max_burnin=DEF_X_MAX_BURNIN, x_max_exp=DEF_X_MAX_EXP, y_max=DEF_Y_MAX, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
-    max_burnin=(x_max_burnin, y_max), max_exp=(x_max_exp, y_max), max=(x_max_exp, y_max), capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, n_segr_regions=DEF_N_SEGR_REGIONS,
+    max_burnin=(x_max_burnin, y_max), max_exp=(x_max_exp, y_max), maxi=(x_max_exp, y_max), capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, n_segr_regions=DEF_N_SEGR_REGIONS,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, premutate=false,
     data_to_generate=DEF_DATA_TO_GENERATE, wld=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=("midhole at x=", x_max_burnin * 2))
 
-    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; max_burnin=max_burnin, max_exp=max_exp, max=max, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate, n_segr_regions=n_segr_regions,
+    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate, n_segr_regions=n_segr_regions,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, premutate=premutate,
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck)
 end
 
-function rangeexp_disk_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1),
+function rangeexp_disk_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1),
     capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false,
     premutate=false, n_segr_regions=DEF_N_SEGR_REGIONS,
     data_to_generate=DEF_DATA_TO_GENERATE, wld=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, max_exp=NaN, max_burnin=NaN, startfill_range=NaN)
@@ -1825,13 +1880,13 @@ function rangeexp_disk_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GEN
         startfill_range = [ran, ran]
     end
 
-    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, max=max, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
+    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, premutate=premutate, n_segr_regions=n_segr_regions,
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck)
 end
 
 function rangeexp_cylinder_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
-    z_max_burnin=DEF_X_MAX_BURNIN, z_max_exp=DEF_X_MAX_EXP, max_burnin=(NaN, NaN, z_max_burnin), max_exp=(NaN, NaN, z_max_exp), max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp), capacity=DEF_CAPACITY,
+    z_max_burnin=DEF_X_MAX_BURNIN, z_max_exp=DEF_X_MAX_EXP, max_burnin=(NaN, NaN, z_max_burnin), max_exp=(NaN, NaN, z_max_exp), maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp), capacity=DEF_CAPACITY,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, premutate=false, n_segr_regions=DEF_N_SEGR_REGIONS,
     data_to_generate=DEF_DATA_TO_GENERATE, wld=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)
 
@@ -1840,14 +1895,14 @@ function rangeexp_cylinder_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N
         startfill_range = [ran, ran, 1:z_max_burnin]
     end
 
-    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, max=max,
+    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi,
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck, capacity=capacity, prolif_rate=prolif_rate, n_segr_regions=n_segr_regions,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, premutate=premutate,
         startfill_range=startfill_range)
 end
 
 function rangeexp_sphere_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
-    max_burnin=NaN, max_exp=NaN, max=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, n_segr_regions=DEF_N_SEGR_REGIONS,
+    max_burnin=NaN, max_exp=NaN, maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, n_segr_regions=DEF_N_SEGR_REGIONS,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, premutate=false,
     data_to_generate=DEF_DATA_TO_GENERATE, wld=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)
 
@@ -1856,7 +1911,7 @@ function rangeexp_sphere_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_G
         startfill_range = [ran, ran, ran]
     end
 
-    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, max=max, r_coords=[1, 2, 3],
+    rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, r_coords=[1, 2, 3],
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld=wld, wld_stats=wld_stats, name=name, bottleneck=bottleneck, capacity=capacity, prolif_rate=prolif_rate, n_segr_regions=n_segr_regions,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, premutate=premutate,
         startfill_range=startfill_range)
@@ -1881,7 +1936,7 @@ Finds the average values of `data` over the whole population for each generation
 Output: array of averages of `data` for every generation
 """
 function average_all(data::Array, n_gens::Int)
-    res = Array{Float32}(undef, 0)
+    res = Array{typ_float}(undef, 0)
     for j in 1:n_gens
         push!(res, mean(filter(!isnan, data[repeat([:],length(size(data))-2)...,j,:])))
     end
@@ -1926,7 +1981,7 @@ Output: array of averages of `data` for every generation and every replicate
 """
 function average_front(data, n_gens, x_max; greaterzero=false, oneside=false, divide=true)
     n_re = size(data, 3)
-    av_arr = Array{Float32}(undef, n_gens, n_re)
+    av_arr = Array{typ_float}(undef, n_gens, n_re)
 
     for i in 1:n_re, j in 1:n_gens
         a_sum = 0
@@ -1960,7 +2015,7 @@ end
 
 function average_front(data, n_gens, x_max, y_max; greaterzero=false, oneside=false, divide=true)
     n_re = size(data, 4)
-    av_arr = Array{Float32}(undef, n_gens, n_re)
+    av_arr = Array{typ_float}(undef, n_gens, n_re)
 
     for i in 1:n_re, j in 1:n_gens
         a_sum = 0
@@ -2032,7 +2087,7 @@ end
 
 function average_front(data, n_gens, x_max, y_max, z_max; greaterzero=false, oneside=false, divide=true)
     n_re = size(data, 5)
-    av_arr = Array{Float32}(undef, n_gens, n_re)
+    av_arr = Array{typ_float}(undef, n_gens, n_re)
 
     for i in 1:n_re, j in 1:n_gens
         a_sum = 0
@@ -2400,6 +2455,14 @@ end
 function twopq(re,deme,locus::Int,gen=re["stats"]["n_gens"],re_index=1)
     a = af_A(re,deme,locus,gen,re_index)
     return a*(1-a)*2
+end
+
+function twopq(re,deme,loci::Array,gen=re["stats"]["n_gens"],re_index=1)
+    return mean([af_A(re,deme,l,gen,re_index)*(1-af_A(re,deme,l,gen,re_index))*2 for l in loci])
+end
+
+function twopq(re,deme,loci::UnitRange=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1)
+    return mean([af_A(re,deme,l,gen,re_index)*(1-af_A(re,deme,l,gen,re_index))*2 for l in loci])
 end
 
 function pbar(re,deme_arr,locus=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1)
