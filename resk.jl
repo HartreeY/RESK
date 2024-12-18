@@ -1227,7 +1227,7 @@ end
 function rangeexp_cylinder(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
     z_max_burnin=DEF_X_MAX_BURNIN, z_max_exp=DEF_X_MAX_EXP, max_burnin=(NaN, NaN, z_max_burnin), max_exp=(NaN, NaN, z_max_exp), maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp), capacity=DEF_CAPACITY,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    data_to_generate=DEF_DATA_TO_GENERATE, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)
+    data_to_generate=DEF_DATA_TO_GENERATE, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, multiproc=true)
 
     if !isa(startfill_range, Array)
         ran = ins_sq(r_max_burnin, r_max_exp)
@@ -1237,7 +1237,7 @@ function rangeexp_cylinder(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GEN
     rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi,
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
-        startfill_range=startfill_range)
+        startfill_range=startfill_range, multiproc=multiproc)
 end
 
 function rangeexp_sphere(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
@@ -2495,7 +2495,7 @@ function af_A(re,deme,locus,gen=re["stats"]["n_gens"],re_index=1)
     return (2*re["cAA"][deme...,locus,gen,re_index]+re["cAa"][deme...,locus,gen,re_index])/re["stats"]["n_loci"]
 end
 
-# TO-DO!!! Test if this is == re["A"]
+# TO-DO!!! Test if this == re["A"]
 
 function af_a(re,deme,locus,gen=re["stats"]["n_gens"],re_index=1)
     return (2*re["caa"][deme...,locus,gen,re_index]+re["cAa"][deme...,locus,gen,re_index])/re["stats"]["n_loci"]
@@ -2530,7 +2530,7 @@ function Ne(data,range=:)
     return [harmmean(k[range]) for k in data]
 end
 
-function F_ST(re,deme_arr,loci=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1;verbose=true)
+function F_ST(re,deme_arr,loci=1:re["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1;verbose=true)
     HT = H_T(re,deme_arr,loci,gen,re_index)
     println(HT)
     HS = H_S(re,deme_arr,loci,gen,re_index)
@@ -2546,7 +2546,7 @@ function Ne_avcuml(data,n_gens_burnin,range)
     return N_e_av_cuml_set
 end
 
-function F_ST(data)
+function F_ST_old(data)
     F_ST_set = [1/(k+1) for k in data]
     return mean(F_ST_set)
 end

@@ -1,4 +1,4 @@
-$sourcePath = "~/rangeexp/resk/data/test_threads.re"
+$sourcePath = "~/rangeexp/resk/data/test_fst.re"
 $destFolder = $PSScriptRoot + "\data\"
 $compName = "raiden.riken.jp"
 $cred = "hartree"
