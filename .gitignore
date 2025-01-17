@@ -1,11 +1,12 @@
-# ----------- dev only ----------
-old/
-pkg_try/
-rangeexp_project/
-dev/
+# ----- comment out on dev ------
+#old/
+#pkg_try/
+#rangeexp_project/
+#dev/
 
 # ------------- all -------------
 study/data/
+dev/data/
 data/
 scp_from_hpc.ps1
 
