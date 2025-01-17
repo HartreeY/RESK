@@ -1,9 +1,0 @@
-# To-do
-
-- Add hexagonal worlds
-- Add more bottleneck options
-- Add the possibility for continuing (or stacking) range expansions
-- Add startfill regions of shapes other than rectangle
-- Add multiple-deme jumps in migration
-- Add an example for a two-sided 1D simulation
-- Add `rangeexp_rect` (rectangle) and `rangeexp_ppip` (parallelepiped)
