@@ -239,7 +239,7 @@ Shows a heatstack (3d heatmap) of `dataname` in `re`.
 
 `scene`: if specified, use a custom GLMakie scene
 """
-function re_heatstack_frame(re::Dict, dataname::String, x_range=1:re["stats"]["max"][1], z_range=1:re["stats"]["max"][3], defc=false, 
+function re_heatstack_frame(re::OrderedDict, dataname::String, x_range=1:re["stats"]["max"][1], z_range=1:re["stats"]["max"][3], defc=false, 
     clim=(minimum(filter(!isnan, re[dataname])), maximum(filter(!isnan, re[dataname]))); title="", scene=Figure())
 
     if defc
