@@ -93,8 +93,8 @@ end
 
 @inbounds function mate(person1,person2)
     global id_counter
-    new_loci = vcat(person1[1:LOCI_N],person2[1:LOCI_N], id_counter, 0)
     id_counter+=1
+    new_loci = vcat(person1[1:LOCI_N],person2[1:LOCI_N], id_counter, 0)
     return new_loci
 end
 
