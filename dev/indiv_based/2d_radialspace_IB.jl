@@ -115,7 +115,7 @@ end
         if isassigned(world,x,y) && length(world[x,y])>0
             n_ppl_at_deme = length(world[x,y])
             expected_offspring = n_ppl_at_deme * (R_PROLIF_RATE/(1 + (n_ppl_at_deme*(R_PROLIF_RATE-1))/K_CAPACITY))
-            birth_chances[x,y] = maximum([0,0.5-expected_offspring/K_CAPACITY/R_PROLIF_RATE])
+            birth_chances[x,y] = maximum([0,(1-expected_offspring/K_CAPACITY)/R_PROLIF_RATE])
             #println("x: $x, ",birth_chances[x])
             if next_gen_pops[x,y]>0
                 push!(next_gen_posits,[x,y])

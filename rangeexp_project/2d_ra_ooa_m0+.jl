@@ -316,4 +316,5 @@ info = [BURN_IN_GEN_N, TOTAL_GEN_N, X_MAX_BURN_IN, X_MAX, Y_MAX, X_START, Y_STAR
 function av_by_dist(obj,gen)
     return [mean(obj[x,:,gen]) for x in 1:size(obj)[1]]
 end
+using Plots
 plot(av_by_dist((res[3]+res[6])/LOCI_N,1:TOTAL_GEN_N))

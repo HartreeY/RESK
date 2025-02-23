@@ -8,8 +8,8 @@ using StatsBase, Distributions, Random
 # Input parameters
 # ------------------------------------------------
 Random.seed!(1234)
-const BURN_IN_GEN_N = 100
-const TOTAL_GEN_N = 500
+const BURN_IN_GEN_N = 300
+const TOTAL_GEN_N = 1000
 
 # Max coordinates of the population bounding space
 const X_MAX_BURN_IN = 5
@@ -50,7 +50,7 @@ for coord in init_coords
         world[coord] = []
     end =#
     for i in 1:K_CAPACITY
-        push!(world[coord],vcat(ones(LOCI_N*2),id_counter,0))
+        push!(world[coord],vcat(ones(LOCI_N*2),id_counter,rand(0:2))) # option to randomise
         #push!(world[coord],id_counter)
         global id_counter+=1
     end
@@ -93,34 +93,14 @@ end
 
 @inbounds function mate(person1,person2)
     global id_counter
-    id_counter+=1
     new_loci = vcat(person1[1:LOCI_N],person2[1:LOCI_N], id_counter, 0)
+    id_counter+=1
     return new_loci
 end
 
 @inbounds function build_next_gen(wld,x_max_migrate)
-    # Determine the number of offspring for each deme
-    next_gen_pops = zeros(Int16,X_DIM)
-    birth_chances = zeros(Float32,X_DIM)
-    next_gen_posits = []
-    fill!(next_gen_pops,-1)
-    for x in 1:X_DIM
-        if isassigned(world,x) && length(world[x])>0
-            n_ppl_at_deme = length(world[x])
-            expected_offspring = n_ppl_at_deme * (R_PROLIF_RATE/(1 + (n_ppl_at_deme*(R_PROLIF_RATE-1))/K_CAPACITY))
-            next_gen_pops[x] = rand(Poisson(expected_offspring))
-            birth_chances[x] = 1 - expected_offspring/K_CAPACITY/R_PROLIF_RATE
-            #println("x: $x, ",birth_chances[x])
-            if next_gen_pops[x]>0
-                push!(next_gen_posits,x)
-            end
-        end
-    end
-    
-
     # Define the world (habitat)
     wld_next = deepcopy(wld)
-    
     all_birth_count = 0
 
     # Main generation cycle (algorithm)
@@ -128,67 +108,73 @@ end
     fill!(mean_fitn_wld,-1)
     pops_wld = zeros(Int32,X_DIM)
     
-    for deme in next_gen_posits
-        curr_persons_at_pos = wld_next[deme]
-        mean_fitn_wld[deme] = mean_fitn(curr_persons_at_pos)
-        max_fitness =  max_fitn(curr_persons_at_pos)
-        
-        birth_count = 0
-        del_guys = []
-        for (ind_i, ind) in pairs(curr_persons_at_pos)
+    for deme in 1:X_DIM
+        if length(wld[deme])>0
+            n_ppl_at_deme = length(wld[deme])
+            expected_offspring = n_ppl_at_deme * (R_PROLIF_RATE/(1 + (n_ppl_at_deme*(R_PROLIF_RATE-1))/K_CAPACITY))
+            birth_chance = 0.5 - expected_offspring/K_CAPACITY/R_PROLIF_RATE
+            curr_persons_at_pos = wld[deme]
+            mean_fitn_wld[deme] = mean_fitn(curr_persons_at_pos)
+            max_fitness =  max_fitn(curr_persons_at_pos)
+            
+            birth_count = 0
+            del_guys = []
+            for (ind_i, ind) in pairs(curr_persons_at_pos)
 
 
-            # Calculate future migration beforehand
-            wv = [M_MIG_RATE/2,1-M_MIG_RATE,M_MIG_RATE/2]
-            move_x = sample(-1:1,Weights(wv))
-            if deme[1]+move_x > x_max_migrate || deme[1]+move_x < 1
-                #move_x = 0
-                move_x = 0
-            end
-            if move_x!=0
-                push!(wld_next[deme[1]+move_x],ind)
-                push!(del_guys, ind_i)
-            end
+                # Calculate future migration beforehand
+                wv = [M_MIG_RATE/2,1-M_MIG_RATE,M_MIG_RATE/2]
+                move_x = sample(-1:1,Weights(wv))
+                if deme[1]+move_x > x_max_migrate || deme[1]+move_x < 1
+                    #move_x = 0
+                    move_x = 0
+                end
+                if move_x!=0
+                    push!(wld_next[deme[1]+move_x],ind)
+                    push!(del_guys, ind_i)
+                end
 
-            # Giving birth
-            if ind[end] > 0 && rand() < birth_chances[deme]
-                mom = curr_persons_at_pos[rand(1:end)]
-                dad = curr_persons_at_pos[rand(1:end)]
-                mom_fit = multi_fitn_in_person(mom)
-                dad_fit = multi_fitn_in_person(dad)
-                mate_cond_res = mate_cond(mom_fit,dad_fit,max_fitness)
-                while !mate_cond_res
+                # Giving birth
+                if ind[end] > 0 && rand() < birth_chance
                     mom = curr_persons_at_pos[rand(1:end)]
                     dad = curr_persons_at_pos[rand(1:end)]
                     mom_fit = multi_fitn_in_person(mom)
                     dad_fit = multi_fitn_in_person(dad)
                     mate_cond_res = mate_cond(mom_fit,dad_fit,max_fitness)
+                    while !mate_cond_res
+                        mom = curr_persons_at_pos[rand(1:end)]
+                        dad = curr_persons_at_pos[rand(1:end)]
+                        mom_fit = multi_fitn_in_person(mom)
+                        dad_fit = multi_fitn_in_person(dad)
+                        mate_cond_res = mate_cond(mom_fit,dad_fit,max_fitness)
+                    end
+                    
+                    gamete_mom = copy(mom) # technically a person, but we'll only use the first half of loci in the mate function
+                    gamete_dad = copy(dad) # technically a person, but we'll only use the first half of loci in the mate function
+                    recombine(gamete_mom)
+                    recombine(gamete_dad)
+                    mutate(gamete_mom)
+                    mutate(gamete_dad)
+                    mate_result = mate(gamete_mom,gamete_dad)
+
+                    push!(wld_next[deme[1]],mate_result)
+
+                    birth_count += 1
+                    all_birth_count += 1
                 end
-                
-                gamete_mom = copy(mom) # technically a person, but we'll only use the first half of loci in the mate function
-                gamete_dad = copy(dad) # technically a person, but we'll only use the first half of loci in the mate function
-                recombine(gamete_mom)
-                recombine(gamete_dad)
-                mutate(gamete_mom)
-                mutate(gamete_dad)
-                mate_result = mate(gamete_mom,gamete_dad)
 
-                push!(wld_next[deme[1]+move_x],mate_result)
-
-                birth_count += 1
-                all_birth_count += 1
-            end
-
-            # Death
-            ind[end] += 1
-            if ind[end]>=3
-                if !(ind_i in del_guys)
-                    push!(del_guys, ind_i)
+                # Death
+                ind[end] += 1
+                if ind[end]>=3
+                    if !(ind_i in del_guys)
+                        push!(del_guys, ind_i)
+                    end
                 end
             end
+            #births_wld[deme] = birth_count
+            deleteat!(wld_next[deme],del_guys)
+            pops_wld[deme] = length(wld_next[deme])
         end
-        pops_wld[deme] = birth_count
-        deleteat!(wld_next[deme],del_guys)
     end
     return wld_next,mean_fitn_wld,pops_wld
 end
@@ -222,4 +208,4 @@ println("Max indiv ID: ",maximum([maximum([k[end-1] for k in i]) for i in filter
 #serialize("output/1d/r_gridrefl2_$procid-pops.dat",pops_world)
 #serialize("output/1d/r_gridrefl2_$procid-meanf.dat",meanf_world)
 using Plots
-heatmap(meanf_world',clim=(0.8,1.2))
+heatmap(meanf_world',clim=(0.9,1.1))

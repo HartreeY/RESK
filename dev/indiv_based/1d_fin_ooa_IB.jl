@@ -6,14 +6,14 @@
 using StatsBase, Distributions, Random
 
 # Input parameters
-# ------------------------------------------------
-Random.seed!(1234)
-const BURN_IN_GEN_N = 24
-const TOTAL_GEN_N = 144
+# ------------------------------------------------ 
+
+const BURN_IN_GEN_N = 500
+const TOTAL_GEN_N = 2500
 
 # Max coordinates of the population bounding space
 const X_MAX_BURN_IN = 5
-const X_MAX = 60
+const X_MAX = 100
 
 const X_START = X_MAX_BURN_IN
 
@@ -23,17 +23,17 @@ const X_DIM = X_MAX
 # Population parameters
 #const INIT_PERSON_N = 30
 const DEMES_FULL_AT_START = 5
-const K_CAPACITY = 35
-const R_PROLIF_RATE = 1.8
+const K_CAPACITY = 100
+const R_PROLIF_RATE = 2
 
 # Gene parameters
 const LOCI_N = 1000
-const SEL_LOCI_N = 312
-const MUT_RATE = 1.0 # genome-wide #0.05 * LOCI_N
-const M_MIG_RATE = 0.145
+const SEL_LOCI_N = 500
+const MUT_RATE = 0.0001
+const M_MIG_RATE = 0.1
 const MUT_DELETER_RATE = 0.9
-const S_SELECT_COEF = 0.01
-const H_DOMIN_COEF = 0.5
+const S_SELECT_COEF = 0.002
+const H_DOMIN_COEF = 0
 
 # Main program
 # ------------------------------------------------
@@ -53,8 +53,9 @@ for coord in init_coords
         world[coord] = []
     end =#
     for i in 1:K_CAPACITY
-        push!(world_ms1[coord],vcat(falses(LOCI_N),id_counter,0))
-        push!(world_ms2[coord],vcat(falses(LOCI_N),id_counter,0))
+        age = rand(0:2)
+        push!(world_ms1[coord],vcat(falses(LOCI_N),id_counter,age)) # option to randomise
+        push!(world_ms2[coord],vcat(falses(LOCI_N),id_counter,age))
         #push!(world[coord],id_counter)
         global id_counter+=1
     end
@@ -118,14 +119,13 @@ end
 
 
 @inbounds function mutate(monosome1,monosome2)
-    get_mutation_random = rand(Poisson(MUT_RATE))
-    @fastmath @inbounds for _ in 1:get_mutation_random
-        pos_alter = sample(1:LOCI_N)
+    @fastmath @inbounds for h in 1:LOCI_N
 
-        if rand(1:2)==1
-            monosome1[pos_alter] = true
-        else
-            monosome2[pos_alter] = true
+        if rand()<MUT_RATE
+            monosome1[h] = true
+        end
+        if rand()<MUT_RATE
+            monosome2[h] = true
         end
     end
 end
@@ -141,37 +141,10 @@ end
     return (mom_fit > rand()*max_fitness) & (dad_fit > rand()*max_fitness)
 end
 
-@inbounds function mate(person1,person2)
-    global id_counter
-    id_counter+=1
-    new_loci = vcat(person1[1:LOCI_N],person2[1:LOCI_N], id_counter,0)
-    return new_loci
-end
-
 @inbounds @inbounds function build_next_gen(wld_ms1,wld_ms2,x_max_migrate)
-    # Determine the number of offspring for each deme
-    next_gen_pops = zeros(Int16,X_DIM)
-    birth_chances = zeros(Float32,X_DIM)
-    next_gen_posits = []
-    fill!(next_gen_pops,-1)
-    for x in 1:X_DIM
-        if isassigned(world_ms1,x) && length(world_ms1[x])>0
-            n_ppl_at_deme = length(world_ms1[x])
-            expected_offspring = n_ppl_at_deme * (R_PROLIF_RATE/(1 + (n_ppl_at_deme*(R_PROLIF_RATE-1))/K_CAPACITY))
-            next_gen_pops[x] = rand(Poisson(expected_offspring))
-            birth_chances[x] = 0.5 - expected_offspring/K_CAPACITY/R_PROLIF_RATE
-            #println("x: $x, ",birth_chances[x])
-            if next_gen_pops[x]>0
-                push!(next_gen_posits,x)
-            end
-        end
-    end
-    
-
     # Define the world (habitat)
     wld_ms1_next = deepcopy(wld_ms1)
     wld_ms2_next = deepcopy(wld_ms2)
-    
     all_birth_count = 0
 
     # Main generation cycle (algorithm)
@@ -185,90 +158,97 @@ end
     muts_Aanonsel_wld = zeros(Float32,X_DIM)
     muts_aanonsel_wld = zeros(Float32,X_DIM)
 
-    for deme in next_gen_posits
-        monosomes1_at_pos = wld_ms1_next[deme]
-        monosomes2_at_pos = wld_ms2_next[deme]
-        fitns = []
-        muts_AAsel_wld[deme],muts_Aasel_wld[deme],muts_aasel_wld[deme],muts_AAnonsel_wld[deme],muts_Aanonsel_wld[deme],muts_aanonsel_wld[deme],fitns = calc_muts_and_fitn_in_deme(monosomes1_at_pos,monosomes2_at_pos)
-        mean_fitn_wld[deme] = mean(fitns)
-        max_fitness =  maximum(fitns)
-        sum_fitn = sum(fitns)
-        fitns /= sum_fitn
+    for deme in 1:X_DIM
+        if length(wld_ms1[deme])>0
+            birth_count = 0
+            n_ppl_at_deme = length(wld_ms1[deme])
 
-        next_generation_size = next_gen_pops[deme]
-        
-        del_guys = []
-        for (ind_i, ind_ms1) in pairs(monosomes1_at_pos)
-            ind_ms2 = monosomes2_at_pos[ind_i]
+            birth_chance = 2*R_PROLIF_RATE*K_CAPACITY/(2*K_CAPACITY+2*n_ppl_at_deme*(R_PROLIF_RATE-1)) - 1
+            monosomes1_at_pos = wld_ms1[deme]
+            monosomes2_at_pos = wld_ms2[deme]
+            fitns = []
+            muts_AAsel_wld[deme],muts_Aasel_wld[deme],muts_aasel_wld[deme],muts_AAnonsel_wld[deme],muts_Aanonsel_wld[deme],muts_aanonsel_wld[deme],fitns = calc_muts_and_fitn_in_deme(monosomes1_at_pos,monosomes2_at_pos)
+            mean_fitn_wld[deme] = mean(fitns)
+            max_fitness =  maximum(fitns)
+            sum_fitn = sum(fitns)
+            fitns /= sum_fitn
+            
+            del_guys = []
+            for (ind_i, ind_ms1) in pairs(monosomes1_at_pos)
+                ind_ms2 = monosomes2_at_pos[ind_i]
 
-            # Calculate future migration beforehand
-            wv = [M_MIG_RATE/2,1-M_MIG_RATE,M_MIG_RATE/2]
-            move_x = sample(-1:1,Weights(wv))
-            if deme[1]+move_x > x_max_migrate || deme[1]+move_x < 1
-                #move_x = 0
-                move_x = 0
-            end
-            if move_x!=0
-                push!(wld_next[deme[1]+move_x],ind_ms1)
-                push!(wld_next[deme[1]+move_x],ind_ms2)
-                push!(del_guys, ind_i)
-            end
+                # Calculate future migration beforehand
+                wv = [M_MIG_RATE/2,1-M_MIG_RATE,M_MIG_RATE/2]
+                move_x = sample(-1:1,Weights(wv))
+                if deme[1]+move_x > x_max_migrate || deme[1]+move_x < 1
+                    #move_x = 0
+                    move_x = 0
+                end
+                if move_x!=0
+                    push!(wld_ms1_next[deme[1]+move_x],ind_ms1)
+                    push!(wld_ms2_next[deme[1]+move_x],ind_ms2)
+                    push!(del_guys, ind_i)
+                end
 
-            # Giving birth
-            if ind[end] > 0 && rand() < birth_chances[deme]
-                guyslen = length(monosomes1_at_pos)
-                mom_id = rand(1:guyslen)
-                dad_id = rand(1:guyslen)
-                mom_fit = fitns[mom_id]
-                dad_fit = fitns[dad_id]
-                mate_cond_res = mate_cond(mom_fit,dad_fit,max_fitness)
-                while !mate_cond_res
+                # Giving birth
+                if ind_ms1[end] > 0 && rand() < birth_chance
                     guyslen = length(monosomes1_at_pos)
                     mom_id = rand(1:guyslen)
                     dad_id = rand(1:guyslen)
                     mom_fit = fitns[mom_id]
                     dad_fit = fitns[dad_id]
                     mate_cond_res = mate_cond(mom_fit,dad_fit,max_fitness)
+                    while !mate_cond_res
+                        guyslen = length(monosomes1_at_pos)
+                        mom_id = rand(1:guyslen)
+                        dad_id = rand(1:guyslen)
+                        mom_fit = fitns[mom_id]
+                        dad_fit = fitns[dad_id]
+                        mate_cond_res = mate_cond(mom_fit,dad_fit,max_fitness)
+                    end
+
+                    mom1 = copy(monosomes1_at_pos[mom_id])
+                    mom2 = copy(monosomes2_at_pos[mom_id])
+                    dad1 = copy(monosomes1_at_pos[dad_id])
+                    dad2 = copy(monosomes2_at_pos[dad_id])
+                    crossover(mom1,mom2)
+                    crossover(dad1,dad2)
+                    mutate(mom1,mom2)
+                    mutate(dad1,dad2)
+                    
+                    # Age
+                    mom1[end] = 0
+                    dad2[end] = 0
+                    # ID
+                    global id_counter
+                    mom1[end-1] = id_counter
+                    dad2[end-1] = id_counter
+                    
+                    id_counter += 1
+
+                    push!(wld_ms1_next[deme[1]],mom1)
+                    push!(wld_ms2_next[deme[1]],dad2)
+
+                    birth_count += 1
+                    all_birth_count += 1
                 end
 
-                mom1 = copy(monosomes1_at_pos[mom_id])
-                mom2 = copy(monosomes2_at_pos[mom_id])
-                dad1 = copy(monosomes1_at_pos[dad_id])
-                dad2 = copy(monosomes2_at_pos[dad_id])
-                crossover(mom1,mom2)
-                crossover(dad1,dad2)
-                mutate(mom1,mom2)
-                mutate(dad1,dad2)
-
-                wv = [M_MIG_RATE/2,1-M_MIG_RATE,M_MIG_RATE/2]
-                move_x = sample(-1:1,Weights(wv))
-                if deme[1]+move_x > x_max_migrate || deme[1]+move_x < 1
-                    move_x = 0
+                # Death
+                ind_ms1[end] += 1
+                ind_ms2[end] += 1
+                if ind_ms1[end]>=3
+                    if !(ind_i in del_guys)
+                        push!(del_guys, ind_i)
+                    end
                 end
-                if !isassigned(wld_ms1_next,deme[1]+move_x)
-                    wld_ms1_next[deme[1]+move_x] = []
-                    wld_ms2_next[deme[1]+move_x] = []
-                end
-                push!(wld_ms1_next[deme[1]+move_x],mom1)
-                push!(wld_ms2_next[deme[1]+move_x],dad2)
-
-                birth_count += 1
-                all_birth_count += 1
             end
-
-            # Death
-            ind_ms1[end] += 1
-            ind_ms2[end] += 1
-            if ind_ms1[end]>=3
-                if !(ind_i in del_guys)
-                    push!(del_guys, ind_i)
-                end
-            end
+            #births_wld[deme] = birth_count
+            deleteat!(wld_ms1_next[deme],del_guys)
+            deleteat!(wld_ms2_next[deme],del_guys)
+            pops_wld[deme] = length(wld_ms1_next[deme])
         end
-        pops_wld[deme] = birth_count
-        deleteat!(wld_next[deme],del_guys)
     end
-    return wld_ms1_next,wld_ms2_next,mean_fitn_wld,muts_Aasel_wld,muts_Aanonsel_wld
+    return wld_ms1_next,wld_ms2_next,pops_wld,mean_fitn_wld,muts_Aasel_wld,muts_Aanonsel_wld
 end
 
 # Iterate the main cycle and save the output
@@ -284,17 +264,17 @@ muts_Aanonsel_world = Array{Float32}(undef,X_DIM,0)
 #muts_aanonsel_world = Array{Float32}(undef,X_DIM,0)
 
 @inbounds for _ in 1:BURN_IN_GEN_N
-    global world_ms1,world_ms2,meanf,muts2,muts5 = build_next_gen(world_ms1,world_ms2,X_MAX_BURN_IN)
+    global world_ms1,world_ms2,pops,meanf,muts2,muts5 = build_next_gen(world_ms1,world_ms2,X_MAX_BURN_IN)
     global meanf_world = cat(meanf_world,meanf, dims=2)
-    #global pops_world = cat(pops_world,pops, dims=2)
+    global pops_world = cat(pops_world,pops, dims=2)
     global muts_Aasel_world = cat(muts_Aasel_world, muts2, dims=2)
     global muts_Aanonsel_world = cat(muts_Aanonsel_world, muts5, dims=2)
 end
 
 @inbounds for _ in (BURN_IN_GEN_N+1):TOTAL_GEN_N
-    global world_ms1,world_ms2,meanf,muts2,muts5 = build_next_gen(world_ms1,world_ms2,X_MAX)
+    global world_ms1,world_ms2,pops,meanf,muts2,muts5 = build_next_gen(world_ms1,world_ms2,X_MAX)
     global meanf_world = cat(meanf_world,meanf, dims=2)
-    #global pops_world = cat(pops_world,pops, dims=2)
+    global pops_world = cat(pops_world,pops, dims=2)
     global muts_Aasel_world = cat(muts_Aasel_world, muts2, dims=2)
     global muts_Aanonsel_world = cat(muts_Aanonsel_world, muts5, dims=2)
 end
@@ -304,11 +284,12 @@ println("Max indiv ID: ",maximum([maximum([k[end-1] for k in i]) for i in filter
 
 # For the use on HPC
 # ---------------------------------
-#using Serialization
-#procid = myid()-1
-#serialize("output/1d/r_gridrefl2_$procid-world.dat",world)
-#serialize("output/1d/r_gridrefl2_$procid-pops.dat",pops_world)
-#serialize("output/1d/r_gridrefl2_$procid-meanf.dat",meanf_world)
+using Serialization
+procid = myid()-1
+#serialize("output/1d/fin_ooa_ib_$procid-world.dat",world)
+serialize("output/1d/fin_ooa_ib_$procid-mutsAasel.dat",muts_Aasel_world)
+serialize("output/1d/fin_ooa_ib_$procid-mutsAanonsel.dat",muts_Aanonsel_world)
+serialize("output/1d/fin_ooa_ib_$procid-meanf.dat",meanf_world)
 using Plots
 #= slow_down = 1
 gen_start = 1
