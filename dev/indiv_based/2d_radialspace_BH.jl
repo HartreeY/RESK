@@ -9,7 +9,7 @@ using StatsBase, Distributions, Random
 # ------------------------------------------------
 Random.seed!(1234)
 const BURN_IN_GEN_N = 1
-const TOTAL_GEN_N = 500
+const TOTAL_GEN_N = 100
 
 # Max coordinates of the population bounding space
 # (population = disk)
@@ -36,7 +36,7 @@ const r_LOG_PROLIF_RATE = log(2)
 const LOCI_N = 20
 const MUT_RATE = 0.05
 const M_MIG_RATE = 0.05
-const MUT_DELETER_RATE = 0.9
+const MUT_DELETER_RATE = 1.0
 const S_SELECT_COEF = 0.005
 const possible_dirs = [[-1,0],[0,-1],[0,1],[1,0]] #[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]
 
@@ -228,7 +228,7 @@ using Plots
 
 slow_down = 1
 gen_start = 1
-gen_end = 500
+gen_end = TOTAL_GEN_N
 
 @gif for i=gen_start:(gen_end*slow_down-1)
     gen_no = trunc(Int,i/slow_down)+1

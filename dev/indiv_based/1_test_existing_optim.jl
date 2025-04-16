@@ -105,7 +105,7 @@ function build_next_gen_inf!(wld_gt::Array, stats::WorldStats,
             next_gen_pops, stats)
     end
 
-    return next_gen
+    return next_gen, fitn_out, pops_out
 end
 
 # Helper function to process a single deme
@@ -163,9 +163,10 @@ end
 # Continued optimizations for remaining functions
 
 # Pre-allocate commonly used arrays and matrices
-function create_empty_world_inf(maxi::Tuple=(DEF_X_MAX, DEF_Y_MAX);
-    name::String=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"),
-    stats_params...)
+function create_empty_world_inf(maxi=(DEF_X_MAX, DEF_Y_MAX); min=(1, 1), name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), capacity=DEF_CAPACITY,
+    prolif_rate=DEF_PROLIF_RATE, n_segr_regions=DEF_N_SEGR_REGIONS, regions=fill(sel_coef,n_segr_regions),
+    mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS)
+    #stats_params...)
     # Preallocate world array with empty vectors
     wld_gt = Array{Vector{typ_float}}(undef, maxi...)
     @inbounds for i in CartesianIndices(wld_gt)
@@ -177,7 +178,16 @@ function create_empty_world_inf(maxi::Tuple=(DEF_X_MAX, DEF_Y_MAX);
         name=name,
         max=maxi,
         wlddim=length(maxi),
-        stats_params...
+        capacity=capacity,
+        prolif_rate=prolif_rate,
+        regions=regions,
+        n_segr_regions=n_segr_regions,
+        mut_rate=mut_rate,
+        migr_rate=migr_rate,
+        migr_mode=migr_mode,
+        sel_coef=sel_coef,
+        prop_of_del_muts=prop_of_del_muts
+        #stats_params...
     )
 
     return wld_gt, wld_stats
@@ -217,13 +227,35 @@ function fill_random_demes_inf!(wld_gt::Array{Vector{typ_float}},
 end
 
 # Optimized range expansion with better memory management
-function rangeexp_inf(n_gens_burnin::Int=DEF_N_GENS_BURNIN,
-    n_gens_exp::Int=DEF_N_GENS_EXP,
-    n_re::Int=1;
-    params...)
+function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), maxi=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, r_coords=[1, 2], capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, 
+    multiproc=true, weightfitn=true, condsel=false, fixed_mate=false, premutate=false, mutratelocus=false,
+    mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, n_segr_regions=DEF_N_SEGR_REGIONS, regions=fill(sel_coef,n_segr_regions), startfill_range=NaN, wld_gt=NaN, wld_stats=NaN)
 
-    # Create output arrays based on parameters
-    outputs = initialize_outputs(params, n_gens_burnin + n_gens_exp, n_re)
+    if isnan(wld_gt)
+        is_fill_random_demes = true
+        #println("No world provided. Creating a new world.")
+        wld_gt, wld_stats = create_empty_world_inf(maxi; name=name, capacity=capacity, prolif_rate=prolif_rate,
+            mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts,
+            n_segr_regions=n_segr_regions, regions=regions, migr_mode=migr_mode)
+        if !isa(startfill_range, Array) && !any(isnan, max_burnin)
+            startfill_range = [1:upper for upper in max_burnin]
+        end
+    end
+
+    wlddim = wld_stats.wlddim
+    wld_stats.max_burnin = max_burnin
+    wld_stats.max_exp = max_exp
+    wld_stats.n_gens_burnin = n_gens_burnin
+    wld_stats.n_gens_exp = n_gens_exp
+    n_gens = n_gens_burnin + n_gens_exp
+    wld_stats.n_gens = n_gens
+
+    function check_what_output(letter)
+        return (occursin(letter, data_to_generate),occursin(letter*"l", data_to_generate))
+    end
+    out_fields = OrderedDict{String, Any}("gt" => check_what_output("G"), "fitn" => check_what_output("F"), "pops" => check_what_output("P"),
+        "mutsdel" => check_what_output("M"), "mutsben" => check_what_output("M"))
 
     # Create thread-local storage for temporary arrays
     temp_arrays = [create_temp_arrays(params) for _ in 1:Threads.nthreads()]
@@ -246,7 +278,13 @@ function process_replicate!(outputs, re, n_gens_burnin, n_gens_exp, params, temp
     # Process generations
     @inbounds for g in 1:n_gens
         # Update migration parameters based on burn-in/expansion phase
-        migr_params = update_migration_params(g, n_gens_burnin, params)
+        if g <= n_gens_burnin
+            wld_stats.max_migr = max_burnin
+            wld_stats.r_max_migr = r_max_burnin
+        else
+            wld_stats.max_migr = max_exp
+            wld_stats.r_max_migr = r_max_exp
+        end
 
         # Process one generation
         process_generation!(wld_gt, wld_stats, outputs, re, g, migr_params, temp_arrays)
@@ -318,9 +356,9 @@ function initialize_outputs(params, n_gens, n_re)
 end
 
 # Memory-efficient processing of a single generation
-function process_generation!(wld_gt, wld_stats, outputs, re, gen, migr_params, temp_arrays)
+function process_generation!(wld_gt, wld_stats, outputs, re, gen, temp_arrays)
     # Calculate next generation
-    next_gen = build_next_gen_inf!(wld_gt, wld_stats, temp_arrays)
+    next_gen, fitn_out, pops_out = build_next_gen_inf!(wld_gt, wld_stats, temp_arrays)
 
     # Update outputs
     update_outputs!(outputs, next_gen, re, gen, temp_arrays)

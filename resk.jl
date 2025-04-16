@@ -436,6 +436,8 @@ Builds the next generation in finite-sites expansions, i.e. advances two world a
 - **(1,3)** - migration is bound within a disk at x and z axes
 - **(1,2,3)** - migration is bound within a sphere at x, y and z axes
 
+`premutate`: 
+
 ---
 
 Output 1: a changed `wld_gt1` = a spatial array of demes that contain individuals' left monosome [Bool] arrays
@@ -2573,12 +2575,12 @@ function twopq(re,deme,loci::UnitRange=1:test["stats"]["n_loci"],gen=re["stats"]
     return mean([af_A(re,deme,l,gen,re_index)*(1-af_A(re,deme,l,gen,re_index))*2 for l in loci])
 end
 
-function pbar(re,deme_arr,locus=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1)
-    return sum([af_A(re,deme,locus,gen,re_index)*re["pops"][deme...,gen,re_index] for deme in deme_arr])/sum([re["pops"][deme...,gen,re_index] for deme in deme_arr])
+function pbar(re,deme_arr,loci=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1)
+    return sum([af_A(re,deme,loci,gen,re_index)*re["pops"][deme...,gen,re_index] for deme in deme_arr])/sum([re["pops"][deme...,gen,re_index] for deme in deme_arr])
 end
 
-function H_S(re,deme_arr,locus=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1)
-    return sum([twopq(re,deme,locus,gen,re_index)*re["pops"][deme...,gen,re_index] for deme in deme_arr])/sum([re["pops"][deme...,gen,re_index] for deme in deme_arr])
+function H_S(re,deme_arr,loci=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1)
+    return sum([twopq(re,deme,loci,gen,re_index)*re["pops"][deme...,gen,re_index] for deme in deme_arr])/sum([re["pops"][deme...,gen,re_index] for deme in deme_arr])
 end
 
 function H_T(re,deme_arr,loci=1:test["stats"]["n_loci"],gen=re["stats"]["n_gens"],re_index=1)

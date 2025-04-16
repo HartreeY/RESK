@@ -9,7 +9,7 @@ using StatsBase, Distributions, Random
 # ------------------------------------------------
 Random.seed!(1234)
 const BURN_IN_GEN_N = 1
-const TOTAL_GEN_N = 100
+const TOTAL_GEN_N = 20
 
 # Max coordinates of the population bounding space
 # (population = disk)
@@ -33,8 +33,9 @@ const R_PROLIF_RATE = 2
 const r_LOG_PROLIF_RATE = log(2)
 
 # Gene parameters
-const LOCI_N = 20
-const SEL_LOCI_N = 20
+const LOCI_N = 1000
+const MUT_DELETER_RATE = 0.85
+const SEL_LOCI_N = trunc(Int,LOCI_N * MUT_DELETER_RATE)
 const MUT_RATE = 0.05
 const M_MIG_RATE = 0.05
 const S_SELECT_COEF = 0.005
@@ -58,8 +59,8 @@ for coord in init_coords
         world_ms2[coord...] = []
     end
     for i in 1:INDIVS_AT_START
-        push!(world_ms1[coord...],vcat(rand(1:2,LOCI_N),id_counter,0))
-        push!(world_ms2[coord...],vcat(rand(1:2,LOCI_N),id_counter,0))
+        push!(world_ms1[coord...],vcat(rand(0:1,LOCI_N),id_counter,0))
+        push!(world_ms2[coord...],vcat(rand(0:1,LOCI_N),id_counter,0))
     end
 end
 selected_loci = randperm(LOCI_N)[1:SEL_LOCI_N]
@@ -82,20 +83,22 @@ selected_loci = randperm(LOCI_N)[1:SEL_LOCI_N]
         new_fitness = 1.0
 
         for j in 1:LOCI_N
-            if monosomes1[i][j]==true && monosomes2[i][j]==true
+            if monosomes1[i][j]==1 && monosomes2[i][j]==1
                 if j in selected_loci
                     muts_AA_sel += 1
                     new_fitness *= 1 - S_SELECT_COEF
                 else
                     muts_AA_nonsel += 1
+                    new_fitness *= 1 + S_SELECT_COEF
                 end
 
-            elseif monosomes1[i][j]==true || monosomes2[i][j]==true
+            elseif monosomes1[i][j]==1 || monosomes2[i][j]==1
                 if j in selected_loci
                     muts_Aa_sel += 1
                     new_fitness *= 1 - H_DOMIN_COEF * S_SELECT_COEF
                 else
                     muts_Aa_nonsel += 1
+                    new_fitness *= 1 + H_DOMIN_COEF * S_SELECT_COEF
                 end
             end
         end
@@ -119,14 +122,13 @@ selected_loci = randperm(LOCI_N)[1:SEL_LOCI_N]
 end
 
 @inbounds function mutate(monosome1,monosome2)
-    get_mutation_random = rand(Poisson(MUT_RATE))
-    @fastmath @inbounds for _ in 1:get_mutation_random
-        pos_alter = sample(1:LOCI_N)
+    @fastmath @inbounds for h in 1:LOCI_N
 
-        if rand(1:2)==1
-            monosome1[pos_alter] = true
-        else
-            monosome2[pos_alter] = true
+        if rand()<MUT_RATE
+            monosome1[h] = true
+        end
+        if rand()<MUT_RATE
+            monosome2[h] = true
         end
     end
 end
@@ -142,12 +144,6 @@ end
     return (mom_fit > rand()*max_fitness) & (dad_fit > rand()*max_fitness)
 end
 
-@inbounds function mate(person1,person2)
-    global id_counter
-    new_loci = vcat(person1[1:LOCI_N],person2[1:LOCI_N], id_counter, 0)
-    id_counter+=1
-    return new_loci
-end
 
 @inbounds function build_next_gen(wld_ms1,wld_ms2,r_max_migrate)
     # Determine the number of offspring for each deme
@@ -197,6 +193,8 @@ end
         muts_AAsel_wld[deme...],muts_Aasel_wld[deme...],muts_aasel_wld[deme...],muts_AAnonsel_wld[deme...],muts_Aanonsel_wld[deme...],muts_aanonsel_wld[deme...],fitns = muts_by_sel_nonsel(monosomes1_at_pos,monosomes2_at_pos)
         mean_fitn_wld[deme...] = mean(fitns)
         max_fitness = maximum(fitns)
+        sum_fitn = sum(fitns)
+        fitns /= sum_fitn
 
         next_generation_size = next_gen_pops[deme...]
         
@@ -238,6 +236,12 @@ end
                             res_y += move_y
                         end
                     end
+
+                    
+                    global id_counter
+                    mom1[end-1] = id_counter
+                    dad2[end-1] = id_counter
+                    id_counter += 1
 
                     push!(wld_ms1_next[res_x,res_y],mom1)
                     push!(wld_ms2_next[res_x,res_y],dad2)
@@ -286,8 +290,11 @@ println("Max indiv ID: ",maximum([maximum([k[end-1] for k in i]) for i in filter
 #serialize("output/2d_radial/rrs_gridrefl_$procid-world.dat",world)
 #serialize("output/2d_radial/rrs_gridrefl_$procid-pop.dat",pops_world)
 #serialize("output/2d_radial/rrs_gridrefl_lat_$procid-meanf.dat",meanf_world)
-using Plots
+using Plots, StatsBase
 #heatmap(meanf_world[:,:,end],clim=(0.9,1.0))
+maxfitn = maximum(meanf_world)
+minfitn = minimum(meanf_world)
+#meanf_world_norm = rescale(meanf_world, (0,1))
 
 slow_down = 1
 gen_start = 1
@@ -295,10 +302,5 @@ gen_end = TOTAL_GEN_N
 
 @gif for i=gen_start:(gen_end*slow_down-1)
     gen_no = trunc(Int,i/slow_down)+1
-    heatmap(meanf_world[:,:,gen_no],aspect_ratio=1,yticks=false,clims=(0.9,1.0),xlabel="gen=$gen_no")
-end
-
-@gif for i=gen_start:(gen_end*slow_down-1)
-    gen_no = trunc(Int,i/slow_down)+1
-    heatmap(muts_Aasel_world[:,:,gen_no],aspect_ratio=1,clims=(0.5,3.0),yticks=false,xlabel="gen=$gen_no")
+    heatmap(muts_Aasel_world[:,:,gen_no],aspect_ratio=1,yticks=false,xlabel="gen=$gen_no")
 end
