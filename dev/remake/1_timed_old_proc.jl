@@ -8,7 +8,7 @@ using StatsBase, Distributions, Random
 # Input parameters
 # ------------------------------------------------
 const BURN_IN_GEN_N = 200
-const TOTAL_GEN_N = 500
+const TOTAL_GEN_N = 700
 
 # Max coordinates of the population bounding space
 const X_MAX_BURN_IN = 5
@@ -35,7 +35,6 @@ const S_SELECT_COEF = 0.005
 
 # Main program
 # ------------------------------------------------
-id_counter = 1
 x_range = 1:Int(X_START)
 init_coords = sample(x_range,DEMES_FULL_AT_START;replace=false)
 
@@ -45,18 +44,13 @@ for k in 1:X_DIM
     world[k] = Array{Float32,1}[]
 end
 for coord in init_coords
-#=     if !isassigned(world,coord)
-        world[coord] = []
-    end =#
     for i in 1:K_CAPACITY
-        push!(world[coord],vcat(ones(LOCI_N*2),id_counter,0))
-        #push!(world[coord],id_counter)
-        global id_counter+=1
+        push!(world[coord],ones(LOCI_N*2))
     end
 end
 
 @inbounds function multi_fitn_in_person(person)
-    return prod(person[1:(end-2)])
+    return prod(person)
 end
 
 @inbounds function max_fitn(persons_at_pos)
@@ -91,25 +85,20 @@ end
 end
 
 @inbounds function mate(person1,person2)
-    global id_counter
-    id_counter+=1
-    new_loci = vcat(person1[1:LOCI_N],person2[1:LOCI_N], id_counter, 0)
+    new_loci = vcat(person1[1:LOCI_N],person2[1:LOCI_N])
     return new_loci
 end
 
 @inbounds @inbounds function build_next_gen(wld,x_max_migrate)
     # Determine the number of offspring for each deme
     next_gen_pops = zeros(Int16,X_DIM)
-    birth_chances = zeros(Float32,X_DIM)
     next_gen_posits = []
     fill!(next_gen_pops,-1)
     for x in 1:X_DIM
-        if isassigned(world,x) && length(world[x])>0
-            n_ppl_at_deme = length(world[x])
+        if isassigned(wld,x) && length(wld[x])>0
+            n_ppl_at_deme = length(wld[x])
             expected_offspring = n_ppl_at_deme * (R_PROLIF_RATE/(1 + (n_ppl_at_deme*(R_PROLIF_RATE-1))/K_CAPACITY))
             next_gen_pops[x] = rand(Poisson(expected_offspring))
-            #birth_chances[x] = 1 - expected_offspring/K_CAPACITY/R_PROLIF_RATE
-            #println("x: $x, ",birth_chances[x])
             if next_gen_pops[x]>0
                 push!(next_gen_posits,x)
             end
@@ -122,8 +111,6 @@ end
     for k in 1:X_DIM
         wld_next[k] = Array{Float32,1}[]
     end
-    
-    all_birth_count = 0
 
     # Main generation cycle (algorithm)
     mean_fitn_wld = Array{Float32}(undef,X_DIM)
@@ -157,8 +144,8 @@ end
                     wv = [M_MIG_RATE/2,1-M_MIG_RATE,M_MIG_RATE/2]
                     move_x = sample(-1:1,Weights(wv))
                     if deme[1]+move_x > x_max_migrate || deme[1]+move_x < 1
-                        #move_x = 0
-                        move_x = -move_x
+                        move_x = 0
+                        #move_x = -move_x
                     end
                     if !isassigned(wld_next,deme[1]+move_x)
                         wld_next[deme[1]+move_x] = []
@@ -166,7 +153,6 @@ end
                     push!(wld_next[deme[1]+move_x],mate_result)
 
                     birth_count += 1
-                    all_birth_count += 1
                 end
             end
             pops_wld[deme] = birth_count
@@ -178,22 +164,25 @@ end
 # Iterate the main cycle and save the output
 # ------------------------------------------------
 
-meanf_world = Array{Float32}(undef,X_DIM,0)
-
-a, b = @timed begin
+function rangeexp(_proc_n=NaN;pops_out=true)
+    wld = deepcopy(world)
+    meanf_world = Array{Float32}(undef,X_DIM,0)
+    pops_world = Array{Int32}(undef,X_DIM,0)
+    
     @inbounds for _ in 1:BURN_IN_GEN_N
-        global world,meanf,pops = build_next_gen(world,X_MAX_BURN_IN)
-        global meanf_world = cat(meanf_world,meanf, dims=2)
+        wld,meanf,pops = build_next_gen(wld,X_MAX_BURN_IN)
+        meanf_world = cat(meanf_world,meanf, dims=2)
+        pops_world = cat(pops_world,pops, dims=2)
     end
 
     @inbounds for _ in (BURN_IN_GEN_N+1):TOTAL_GEN_N
-        global world,meanf,pops = build_next_gen(world,X_MAX)
-        global meanf_world = cat(meanf_world,meanf, dims=2)
+        wld,meanf,pops = build_next_gen(wld,X_MAX)
+        meanf_world = cat(meanf_world,meanf, dims=2)
+        pops_world = cat(pops_world,pops, dims=2)
+    end
+    if pops_out
+        return meanf_world,pops_world
+    else
+        return meanf_world
     end
 end
-@show b
-
-using Serialization
-procid = myid()-1
-#serialize("output/remake/old1_$procid-world.dat",world)
-serialize("output/remake/old1_$procid-meanf.dat",meanf_world)

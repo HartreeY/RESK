@@ -968,8 +968,8 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
             #    @spawnat k include("../resk.jl")
             #end
             @everywhere include(@__FILE__)
-            dicts_out = pmap(tsk_re, 1:n_re)
-            npcs = nprocs()
+            dicts_out = pmap(tsk_re, 1:n_re) # uses workers, confirmed
+            npcs = workers()
             println("Running $n_re replicates on $npcs processes")
             #rmprocs(temp_procs)
         else

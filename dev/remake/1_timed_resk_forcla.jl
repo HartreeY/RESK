@@ -1,16 +1,13 @@
-DEF_X_MAX = 100
+DEF_X_MAX = 500
 DEF_Y_MAX = 10
 DEF_Z_MAX = 10
 DEF_N_DEMES_STARTFILL = 5
-DEF_CAPACITY = 20
-DEF_PROLIF_RATE = 1.8
-DEF_MUT_RATE = 0.7567 # Genome-wide mutation rate
-DEF_MIGR_RATE = 0.1 # Migration rate
-DEF_SEL_COEF = 0.002 # Selection coefficient
+DEF_CAPACITY = 100
+DEF_PROLIF_RATE = 2
+DEF_MUT_RATE = 0.05 # Genome-wide mutation rate
+DEF_MIGR_RATE = 0.05 # Migration rate
+DEF_SEL_COEF = 0.005 # Selection coefficient
 DEF_PROP_OF_DEL_MUTS = 0.9
-DEF_DOMIN_COEF = 0 # Dominance coefficient
-DEF_N_SEL_LOCI = 500 # Number of selected loci
-DEF_N_LOCI = 1000
 DEF_N_SEGR_REGIONS = 20
 DEF_X_MAX_BURNIN = 5
 DEF_R_MAX_BURNIN = 3 # Radius that bounds the burn-in area
@@ -22,7 +19,7 @@ DEF_N_GENS_EXP = 40 # Number of expansion generations
 DEF_MIGR_MODE = "ort" # Migration mode
 DEF_DATA_TO_GENERATE = "FP"
 
-using StatsBase, Distributions, Random, SpecialFunctions, Serialization, Dates, DataStructures, Distributed #ThreadsX
+using StatsBase, Distributions, Random, SpecialFunctions, Serialization, Dates, DataStructures, Distributed
 
 MIGR_PROBS = [
     Dict(["ort" => (1, 0)]), # 1D
@@ -371,7 +368,7 @@ end
 
 function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), maxi=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, r_coords=[1, 2], capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, 
-    multiproc=true, weightfitn=true, condsel=false, fixed_mate=false, premutate=false, mutratelocus=false,
+    multiproc=true, weightfitn=false, condsel=true, fixed_mate=true, premutate=false, mutratelocus=false,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, n_segr_regions=DEF_N_SEGR_REGIONS, regions=fill(sel_coef,n_segr_regions), startfill_range=NaN, wld_gt=NaN, wld_stats=NaN)
 
     if isnan(wld_gt)
@@ -528,90 +525,3 @@ function rangeexp_ray_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS
         n_segr_regions=n_segr_regions, regions=regions, startfill_range=startfill_range, 
         wld_gt=wld_gt, wld_stats=wld_stats)
 end
-
-#= using ProfileView, Profile
-A = @profile rangeexp_ray_inf(0,300,1;x_max_burnin=5,x_max_exp=500,data_to_generate="F",capacity=100,prolif_rate=2,mut_rate=0.05,migr_rate=0.05,sel_coef=0.005,weightfitn=false,condsel=true,fixed_mate=true)
-ProfileView.view() =#
-
-# ------------------- Tests ----------------------
-# 1. Time for 1 re
-
-#A, tim = @timed rangeexp_ray_inf(200,300,1;x_max_burnin=5,x_max_exp=500,data_to_generate="F",capacity=100,prolif_rate=2,mut_rate=0.05,migr_rate=0.05,sel_coef=0.005,weightfitn=false,condsel=true,fixed_mate=true)
-#tim
-
-# 2. Time for 2, 3 re
-
-#= A, tim = @timed rangeexp_ray_inf(200,300,1;x_max_burnin=5,x_max_exp=500,data_to_generate="F",capacity=100,prolif_rate=2,mut_rate=0.05,migr_rate=0.05,sel_coef=0.005,weightfitn=false,condsel=true,fixed_mate=true,multiproc=false)
-A, tim2 = @timed rangeexp_ray_inf(200,300,1;x_max_burnin=5,x_max_exp=500,data_to_generate="F",capacity=100,prolif_rate=2,mut_rate=0.05,migr_rate=0.05,sel_coef=0.005,weightfitn=false,condsel=true,fixed_mate=true,multiproc=false)
-A, tim3 = @timed rangeexp_ray_inf(200,300,1;x_max_burnin=5,x_max_exp=500,data_to_generate="F",capacity=100,prolif_rate=2,mut_rate=0.05,migr_rate=0.05,sel_coef=0.005,weightfitn=false,condsel=true,fixed_mate=true,multiproc=false)
-tim+tim2+tim3 =#
-
-#= A, tim = @timed rangeexp_ray_inf(200,300,3;x_max_burnin=5,x_max_exp=500,data_to_generate="F",capacity=100,prolif_rate=2,mut_rate=0.05,migr_rate=0.05,sel_coef=0.005,weightfitn=false,condsel=true,fixed_mate=true,multiproc=false)
-tim =#
-#= 
-A, tim = @timed rangeexp_ray_inf(2,3,2;x_max_burnin=5,x_max_exp=500,data_to_generate="F",capacity=100,prolif_rate=2,mut_rate=0.05,migr_rate=0.05,sel_coef=0.005,weightfitn=false,condsel=true,fixed_mate=true,multiproc=true)
-tim =#
-
-#= using Statistics
-
-stacked = cat(arrays...; dims=3)
-avg = mapslices(x -> mean(skipmissing(x)), stacked; dims=3) =#
-
-# 3. Plots
-
-#= function average_front(data, n_gens, x_max; greaterzero=false, oneside=false, divide=true)
-    n_re = size(data, 3)
-    av_arr = Array{typ_float}(undef, n_gens, n_re)
-
-    for i in 1:n_re, j in 1:n_gens
-        a_sum = 0
-        cnt = 0
-        frontier = x_max
-        while frontier != 1 && (isnan(data[frontier, j, i]) || (greaterzero && data[frontier, j, i] == 0))
-            frontier -= 1
-        end
-        if data[frontier, j, i] >= 0 || (greaterzero && data[frontier, j, i] > 0)
-            a_sum += data[frontier, j, i]
-            cnt += 1
-        end
-        if !oneside
-            frontier = 1
-            while frontier != x_max && (isnan(data[frontier, j, i]) || (greaterzero && data[frontier, j, i] == 0))
-                frontier += 1
-            end
-            if data[frontier, j, i] >= 0 || (greaterzero && data[frontier, j, i] > 0)
-                a_sum += data[frontier, j, i]
-                cnt += 1
-            end
-        end
-        if divide
-            a_sum /= cnt
-        end
-        av_arr[j, i] = a_sum
-    end
-
-    return av_arr
-end
-
-function average_front(re, dataname; greaterzero=false, oneside=false, divide=true)
-    average_front(re[dataname], re["stats"]["n_gens"], re["stats"]["max"]...; greaterzero=greaterzero, oneside=oneside, divide=divide)
-end
-
-function average_ts(ts_arr, n_gens=size(ts_arr))
-    return [mean(ts_arr[i,:]) for i in 1:n_gens]
-end
-
-function norm_onset_mean(ts, n_gens_burnin::Int)
-    normal_array = copy(ts)
-    start = n_gens_burnin+1
-    normal_array[start:end] /= ts[start]
-    return normal_array
-end
-
-using Plots
-heatmap(A["fitn"][:,:,1])
-
-A_fitn_frontav = average_front(A,"fitn";oneside=true)
-A_fitn_frontav_mean = average_ts(A_fitn_frontav, A["stats"]["n_gens"])
-A_fitn_frontav_meanN = norm_onset_mean(A_fitn_frontav_mean, A["stats"]["n_gens_burnin"]+1)
-Plots.plot(A_fitn_frontav_meanN[(A["stats"]["n_gens_burnin"]+2):end],label="Onset mean normalisation",xlabel="Generation") =#
