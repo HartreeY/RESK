@@ -4,11 +4,11 @@
 # ------------------------------------------------
 
 using StatsBase, Distributions, Random
-
+Random.seed!(1234)
 # Input parameters
 # ------------------------------------------------
-const BURN_IN_GEN_N = 200
-const TOTAL_GEN_N = 700
+const BURN_IN_GEN_N = 1
+const TOTAL_GEN_N = 1
 
 # Max coordinates of the population bounding space
 const X_MAX_BURN_IN = 5
@@ -104,6 +104,7 @@ end
             end
         end
     end
+    println(next_gen_pops)
     
 
     # Define the world (habitat)
@@ -131,16 +132,19 @@ end
                 dad = curr_persons_at_pos[rand(1:end)]
                 mom_fit = multi_fitn_in_person(mom)
                 dad_fit = multi_fitn_in_person(dad)
-
+                
                 if mate_cond(mom_fit,dad_fit,max_fitness)
+                    
                     gamete_mom = copy(mom) # technically a person, but we'll only use the first half of loci in the mate function
                     gamete_dad = copy(dad) # technically a person, but we'll only use the first half of loci in the mate function
                     recombine(gamete_mom)
                     recombine(gamete_dad)
+                    
                     mutate(gamete_mom)
                     mutate(gamete_dad)
+                    
                     mate_result = mate(gamete_mom,gamete_dad)
-
+                    println(deme," ",rand(1))
                     wv = [M_MIG_RATE/2,1-M_MIG_RATE,M_MIG_RATE/2]
                     move_x = sample(-1:1,Weights(wv))
                     if deme[1]+move_x > x_max_migrate || deme[1]+move_x < 1
@@ -164,7 +168,7 @@ end
 # Iterate the main cycle and save the output
 # ------------------------------------------------
 
-function rangeexp(_proc_n=NaN;pops_out=true)
+function rangeexp(_proc_n=NaN;pops_out=false)
     wld = deepcopy(world)
     meanf_world = Array{Float32}(undef,X_DIM,0)
     pops_world = Array{Int32}(undef,X_DIM,0)

@@ -1,5 +1,5 @@
 using StatsBase, Distributions, Random, SpecialFunctions, Serialization, Dates, DataStructures, Distributed
-
+Random.seed!(1234)
 # Define concrete types to improve type stability
 struct WorldStats
     name::String
@@ -23,7 +23,6 @@ struct WorldStats
     startfill::Vector{UnitRange{Int64}}
     n_demes_startfill::Int
 end
-
 
 # Pre-define migration direction constants
 const MIGR_DIRS_ORT_1D = [[1], [-1]]
@@ -168,8 +167,8 @@ end
 # Optimized offspring calculator
 function calc_offspring(wld::typ_gt_inf, stats::WorldStats)
     next_gen_posits = Vector{Vector{Int}}()
-    next_gen_pops = Array{Float32}(undef, stats.max...)
-    fill!(next_gen_pops, -1.0f0)
+    next_gen_pops = Array{Int16}(undef, stats.max...)
+    fill!(next_gen_pops, -1)
     
     @inbounds for idx in CartesianIndices(stats.max)
         if length(wld[idx]) > 0
@@ -199,6 +198,7 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
     
     # Calculate offspring counts
     next_gen_posits, next_gen_pops = calc_offspring(wld_gt, stats)
+    println(next_gen_pops)
     
     # Pre-allocate reused arrays for mating
     mate_result = ones(typ_float, stats.n_segr_regions * 2)
@@ -217,7 +217,7 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
         
         if next_generation_size > 0
             # Create births
-            @inbounds for _ in 1:next_generation_size
+            @inbounds for k in 1:next_generation_size
                 # Select parents
                 mom_idx, dad_idx = 1, 1
                 
@@ -236,6 +236,7 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
                 if !condsel || (fitnesses[mom_idx] > rand()*maximum(fitnesses) && 
                                fitnesses[dad_idx] > rand()*maximum(fitnesses))
                     
+                    
                     # Create gametes with recombination
                     gamete_mom = copy(mom)
                     gamete_dad = copy(dad)
@@ -251,7 +252,6 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
                                    stats.sel_coef, stats.prop_of_del_muts)
                         mutate_inf!(gamete_dad, stats.mut_rate, stats.n_segr_regions, 
                                    stats.sel_coef, stats.prop_of_del_muts)
-                        
                         # Mating with fixed buffer
                         mate_inf!(mate_result, gamete_mom, gamete_dad, stats.n_segr_regions, fixed_mate)
                     else
@@ -262,7 +262,7 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
                         mutate_inf!(mate_result, stats.mut_rate, stats.n_segr_regions, 
                                    stats.sel_coef, stats.prop_of_del_muts)
                     end
-                    
+                    println(k," ",rand(1))
                     # Calculate migration
                     calc_migr_dist!(move_buffer, deme, stats, max_migr, r_max_migr)
                     
@@ -283,7 +283,7 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
 end
 
 # Main simulation function
-function rangeexp_ray_inf(j,n_gens_burnin::Int=200, n_gens_exp::Int=300, n_re::Int=1;
+function rangeexp_ray_inf(j,n_gens_burnin::Int=1, n_gens_exp::Int=0, n_re::Int=1;
                                x_max_burnin::Int=5, x_max_exp::Int=500, migr_mode::String="ort",
                                prolif_rate::Float64=2.0, capacity::Int=100,
                                mut_rate::Float64=0.05, migr_rate::Float64=0.05, 
@@ -291,6 +291,7 @@ function rangeexp_ray_inf(j,n_gens_burnin::Int=200, n_gens_exp::Int=300, n_re::I
                                n_segr_regions::Int=20, weightfitn::Bool=true, 
                                condsel::Bool=false, fixed_mate::Bool=false, 
                                premutate::Bool=false, multiproc::Bool=true)
+    
     # Create a typed stats structure
     stats = WorldStats(
         "sim_$(Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"))",
@@ -311,32 +312,32 @@ function rangeexp_ray_inf(j,n_gens_burnin::Int=200, n_gens_exp::Int=300, n_re::I
         n_gens_burnin + n_gens_exp,
         Vector{UnitRange{Int64}}(undef,0),0
     )
+    
+    # Create the world
+    wld_gt = (typ_gt_inf)(undef, stats.max...)
+    for k in CartesianIndices(stats.max)
+        wld_gt[k] = Array{typ_float,1}[]
+    end
 
-        # Create the world
-        wld_gt = (typ_gt_inf)(undef, stats.max...)
-        for k in CartesianIndices(stats.max)
-            wld_gt[k] = Array{typ_float,1}[]
+    # Fill initial demes
+    possible_init_coords = collect(CartesianIndices((x_max_burnin,)))
+    init_coords = sample(possible_init_coords, 5, replace=false)  # Start with 5 demes
+    
+    for coord in init_coords
+        for _ in 1:stats.capacity
+            push!(wld_gt[coord], ones(typ_float, stats.n_segr_regions * 2))
         end
-        
-        # Fill initial demes
-        burnin_range = [1:x_max_burnin]
-        possible_init_coords = collect(CartesianIndices((x_max_burnin,)))
-        init_coords = sample(possible_init_coords, 5, replace=false)  # Start with 5 demes
-        
-        for coord in init_coords
-            for _ in 1:stats.capacity
-                push!(wld_gt[coord], ones(typ_float, stats.n_segr_regions * 2))
-            end
-        end
-        
-        # Create array for output
-        wld_gt_next = (typ_gt_inf)(undef, stats.max...)
-        for k in CartesianIndices(stats.max)
-            wld_gt_next[k] = Array{typ_float,1}[]
-        end
-        
-        final_pops = zeros(typ_float, stats.max...,n_gens_burnin + n_gens_exp)
-        final_fitness = zeros(typ_float, stats.max...,n_gens_burnin + n_gens_exp)
+    end
+    
+    # Create array for output
+    wld_gt_next = (typ_gt_inf)(undef, stats.max...)
+    for k in CartesianIndices(stats.max)
+        wld_gt_next[k] = Array{typ_float,1}[]
+    end
+    
+    
+    final_pops = zeros(typ_float, stats.max...,n_gens_burnin + n_gens_exp)
+    final_fitness = zeros(typ_float, stats.max...,n_gens_burnin + n_gens_exp)
 
     # Run burn-in phase
     for j in 1:n_gens_burnin
@@ -376,6 +377,6 @@ function rangeexp_ray_inf(j,n_gens_burnin::Int=200, n_gens_exp::Int=300, n_re::I
         wld_gt, wld_gt_next = wld_gt_next, wld_gt
     end
     
-    return (pops=final_pops, fitness=final_fitness)
-
+    #return (pops=final_pops, fitness=final_fitness)
+    return (fitness=final_fitness)
 end
