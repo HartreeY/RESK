@@ -4,11 +4,11 @@
 # ------------------------------------------------
 
 using StatsBase, Distributions, Random
-Random.seed!(1234)
+#Random.seed!(1234)
 # Input parameters
 # ------------------------------------------------
-const BURN_IN_GEN_N = 1
-const TOTAL_GEN_N = 1
+const BURN_IN_GEN_N = 100
+const TOTAL_GEN_N = 400
 
 # Max coordinates of the population bounding space
 const X_MAX_BURN_IN = 5
@@ -80,8 +80,13 @@ end
     end
 end
 
-@inbounds function mate_cond(mom_fit,dad_fit,max_fitness)
-    return (mom_fit > rand()*max_fitness) & (dad_fit > rand()*max_fitness)
+@inbounds function mate_cond(mom_fit,dad_fit,max_fitness,verbose=false)
+    thing1 = rand()
+    thing2 = rand()
+    if verbose
+        print(" $thing1 $thing2 ")
+    end
+    return (mom_fit > thing1*max_fitness) & (dad_fit > thing2*max_fitness)
 end
 
 @inbounds function mate(person1,person2)
@@ -89,7 +94,7 @@ end
     return new_loci
 end
 
-@inbounds @inbounds function build_next_gen(wld,x_max_migrate)
+@inbounds @inbounds function build_next_gen(wld,x_max_migrate;verbose=false)
     # Determine the number of offspring for each deme
     next_gen_pops = zeros(Int16,X_DIM)
     next_gen_posits = []
@@ -104,7 +109,9 @@ end
             end
         end
     end
-    println(next_gen_pops)
+    if verbose
+        println(next_gen_pops)
+    end
     
 
     # Define the world (habitat)
@@ -133,7 +140,7 @@ end
                 mom_fit = multi_fitn_in_person(mom)
                 dad_fit = multi_fitn_in_person(dad)
                 
-                if mate_cond(mom_fit,dad_fit,max_fitness)
+                if mate_cond(mom_fit,dad_fit,max_fitness,verbose)
                     
                     gamete_mom = copy(mom) # technically a person, but we'll only use the first half of loci in the mate function
                     gamete_dad = copy(dad) # technically a person, but we'll only use the first half of loci in the mate function
@@ -144,9 +151,19 @@ end
                     mutate(gamete_dad)
                     
                     mate_result = mate(gamete_mom,gamete_dad)
-                    println(deme," ",rand(1))
-                    wv = [M_MIG_RATE/2,1-M_MIG_RATE,M_MIG_RATE/2]
-                    move_x = sample(-1:1,Weights(wv))
+                    if verbose
+                        println(birth_count+1," ",rand(1))
+                    end
+                    #wv = [M_MIG_RATE/2,1-M_MIG_RATE,M_MIG_RATE/2]
+                    #move_x = sample(-1:1,Weights(wv))
+
+
+                    move_x = 0
+                    g = rand()
+                    if g < M_MIG_RATE
+                        move_x = sample([1,-1])
+                        
+                    end
                     if deme[1]+move_x > x_max_migrate || deme[1]+move_x < 1
                         move_x = 0
                         #move_x = -move_x
@@ -168,19 +185,19 @@ end
 # Iterate the main cycle and save the output
 # ------------------------------------------------
 
-function rangeexp(_proc_n=NaN;pops_out=false)
+function rangeexp(_proc_n=NaN,n_burnin=BURN_IN_GEN_N,n_total=TOTAL_GEN_N;pops_out=true,verbose=false)
     wld = deepcopy(world)
     meanf_world = Array{Float32}(undef,X_DIM,0)
     pops_world = Array{Int32}(undef,X_DIM,0)
     
-    @inbounds for _ in 1:BURN_IN_GEN_N
-        wld,meanf,pops = build_next_gen(wld,X_MAX_BURN_IN)
+    @inbounds for _ in 1:n_burnin
+        wld,meanf,pops = build_next_gen(wld,X_MAX_BURN_IN;verbose=verbose)
         meanf_world = cat(meanf_world,meanf, dims=2)
         pops_world = cat(pops_world,pops, dims=2)
     end
 
-    @inbounds for _ in (BURN_IN_GEN_N+1):TOTAL_GEN_N
-        wld,meanf,pops = build_next_gen(wld,X_MAX)
+    @inbounds for _ in (n_burnin+1):n_total
+        wld,meanf,pops = build_next_gen(wld,X_MAX;verbose=verbose)
         meanf_world = cat(meanf_world,meanf, dims=2)
         pops_world = cat(pops_world,pops, dims=2)
     end

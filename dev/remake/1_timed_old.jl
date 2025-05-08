@@ -97,7 +97,7 @@ end
     return new_loci
 end
 
-@inbounds @inbounds function build_next_gen(wld,x_max_migrate)
+@inbounds function build_next_gen(wld,x_max_migrate)
     # Determine the number of offspring for each deme
     next_gen_pops = zeros(Int16,X_DIM)
     birth_chances = zeros(Float32,X_DIM)

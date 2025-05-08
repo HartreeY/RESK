@@ -190,7 +190,7 @@ end
 function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf, stats::WorldStats, pops_next, fitness_next;
                          max_migr::Tuple=stats.max, r_max_migr::Float64=0.0,
                          weightfitn::Bool=true, condsel::Bool=false, 
-                         fixed_mate::Bool=false, premutate::Bool=false)
+                         fixed_mate::Bool=false, premutate::Bool=false, SS::Bool=false,verbose=false)
     
     # Preallocate buffers for migration
     move_buffer = zeros(Int16, stats.wlddim)
@@ -198,7 +198,9 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
     
     # Calculate offspring counts
     next_gen_posits, next_gen_pops = calc_offspring(wld_gt, stats)
-    println(next_gen_pops)
+    if verbose
+        println(next_gen_pops)
+    end
     
     # Pre-allocate reused arrays for mating
     mate_result = ones(typ_float, stats.n_segr_regions * 2)
@@ -217,10 +219,10 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
         
         if next_generation_size > 0
             # Create births
-            @inbounds for k in 1:next_generation_size
+            k = 0
+            @inbounds while k < next_generation_size
                 # Select parents
                 mom_idx, dad_idx = 1, 1
-                
                 if weightfitn
                     mom_idx = wsample(1:length(inds_at_pos), fitnesses)
                     dad_idx = wsample(1:length(inds_at_pos), fitnesses)
@@ -233,10 +235,14 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
                 dad = inds_at_pos[dad_idx]
                 
                 # Fast path for non-conditional selection
-                if !condsel || (fitnesses[mom_idx] > rand()*maximum(fitnesses) && 
-                               fitnesses[dad_idx] > rand()*maximum(fitnesses))
-                    
-                    
+                thing1 = rand()
+                thing2 = rand()
+                if verbose
+                    print(" ",thing1," ", thing2," ")
+                end
+                if !condsel || (fitnesses[mom_idx] > thing1*maximum(fitnesses) && 
+                               fitnesses[dad_idx] > thing2*maximum(fitnesses))
+                    k+=1
                     # Create gametes with recombination
                     gamete_mom = copy(mom)
                     gamete_dad = copy(dad)
@@ -262,7 +268,9 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
                         mutate_inf!(mate_result, stats.mut_rate, stats.n_segr_regions, 
                                    stats.sel_coef, stats.prop_of_del_muts)
                     end
-                    println(k," ",rand(1))
+                    if verbose
+                        println(k," ",rand(1))
+                    end
                     # Calculate migration
                     calc_migr_dist!(move_buffer, deme, stats, max_migr, r_max_migr)
                     
@@ -274,23 +282,25 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
                     
                     # Add offspring to next generation
                     push!(wld_gt_next[indices...], copy(mate_result))
-                    pops_next[indices...,genno]=length(wld_gt_next[indices...])
-                    fitness_next[indices...,genno]=mean(calc_fitness.(wld_gt_next[indices...]))
+                elseif !SS
+                    k+=1
                 end
             end
         end
+        pops_next[deme...,genno]=length(wld_gt_next[deme...])
+        fitness_next[deme...,genno]=mean(calc_fitness.(wld_gt_next[deme...]))
     end
 end
 
 # Main simulation function
-function rangeexp_ray_inf(j,n_gens_burnin::Int=1, n_gens_exp::Int=0, n_re::Int=1;
+function rangeexp_ray_inf(n_gens_burnin::Int=100, n_gens_exp::Int=300, n_re::Int=1;
                                x_max_burnin::Int=5, x_max_exp::Int=500, migr_mode::String="ort",
                                prolif_rate::Float64=2.0, capacity::Int=100,
                                mut_rate::Float64=0.05, migr_rate::Float64=0.05, 
                                sel_coef::Float64=0.005, prop_of_del_muts::Float64=0.9,
-                               n_segr_regions::Int=20, weightfitn::Bool=true, 
-                               condsel::Bool=false, fixed_mate::Bool=false, 
-                               premutate::Bool=false, multiproc::Bool=true)
+                               n_segr_regions::Int=20, weightfitn::Bool=false, 
+                               condsel::Bool=true, fixed_mate::Bool=true, 
+                               premutate::Bool=true, SS::Bool=true, verbose=false)
     
     # Create a typed stats structure
     stats = WorldStats(
@@ -310,7 +320,8 @@ function rangeexp_ray_inf(j,n_gens_burnin::Int=1, n_gens_exp::Int=0, n_re::Int=1
         n_gens_burnin,
         n_gens_exp,
         n_gens_burnin + n_gens_exp,
-        Vector{UnitRange{Int64}}(undef,0),0
+        Vector{UnitRange{Int64}}(undef,0),
+        0
     )
     
     # Create the world
@@ -352,7 +363,7 @@ function rangeexp_ray_inf(j,n_gens_burnin::Int=1, n_gens_exp::Int=0, n_re::Int=1
                         weightfitn=weightfitn,
                         condsel=condsel, 
                         fixed_mate=fixed_mate,
-                        premutate=premutate)
+                        premutate=premutate,SS=SS,verbose=verbose)
         
         # Swap current and next generation
         wld_gt, wld_gt_next = wld_gt_next, wld_gt
@@ -371,12 +382,12 @@ function rangeexp_ray_inf(j,n_gens_burnin::Int=1, n_gens_exp::Int=0, n_re::Int=1
                         weightfitn=weightfitn,
                         condsel=condsel, 
                         fixed_mate=fixed_mate,
-                        premutate=premutate)
+                        premutate=premutate,SS=SS,verbose=verbose)
         
         # Swap current and next generation
         wld_gt, wld_gt_next = wld_gt_next, wld_gt
     end
     
-    #return (pops=final_pops, fitness=final_fitness)
-    return (fitness=final_fitness)
+    return (fitness=final_fitness,pops=final_pops)
+    #return (fitness=final_fitness)
 end
