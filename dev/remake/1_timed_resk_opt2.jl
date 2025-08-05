@@ -293,11 +293,11 @@ function build_next_gen_inf!(genno, wld_gt_next::typ_gt_inf, wld_gt::typ_gt_inf,
 end
 
 # Main simulation function
-function rangeexp_ray_inf(n_gens_burnin::Int=100, n_gens_exp::Int=300, n_re::Int=1;
-                               x_max_burnin::Int=5, x_max_exp::Int=500, migr_mode::String="ort",
-                               prolif_rate::Float64=2.0, capacity::Int=100,
-                               mut_rate::Float64=0.05, migr_rate::Float64=0.05, 
-                               sel_coef::Float64=0.005, prop_of_del_muts::Float64=0.9,
+function rangeexp_ray_inf(n_gens_burnin::Int=100, n_gens_exp::Int=400, n_re::Int=1;
+                               x_max_burnin::Int=5, x_max_exp::Int=100, migr_mode::String="ort",
+                               prolif_rate::Float64=2.0, capacity::Int=70,
+                               mut_rate::Float64=0.08, migr_rate::Float64=0.2, 
+                               sel_coef::Float64=0.01, prop_of_del_muts::Float64=0.9,
                                n_segr_regions::Int=20, weightfitn::Bool=false, 
                                condsel::Bool=true, fixed_mate::Bool=true, 
                                premutate::Bool=true, SS::Bool=true, verbose=false)
