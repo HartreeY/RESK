@@ -120,6 +120,16 @@ function ins_cb(r_max_burnin, x_max)
     return (trunc(Int, 1 + x_max/2 - r_max_burnin * 0.577)):(trunc(Int, 1 + x_max/2 + r_max_burnin * 0.577))
 end
 
+function sphere_lattice_iter(x::Real, y::Real, z::Real, r::Real)
+    r ≥ 0 || throw(ArgumentError("r must be nonnegative"))
+    xmin = max(1, ceil(Int, x - r)); xmax = floor(Int, x + r)
+    ymin = max(1, ceil(Int, y - r)); ymax = floor(Int, y + r)
+    zmin = max(1, ceil(Int, z - r)); zmax = floor(Int, z + r)
+    r2 = r^2
+    Iterators.filter(((i,j,k),)->(i-x)^2 + (j-y)^2 + (k-z)^2 <= r2,
+                     Iterators.product(xmin:xmax, ymin:ymax, zmin:zmax))
+end
+
 
 """
 Calculates the number of offspring individuals in currently filled demes. Used when building the next generation.
@@ -192,7 +202,7 @@ Calculates an individual's migration distance. Used when building the next gener
 Output: array of the amount of demes moved per each coordinate
 """
 function calc_migr_dist!(move::Vector{Int16}, deme::Vector{Int}, stats::WorldStats, 
-                        max_migr::Tuple, r_max_migr::Int64=0, r_coords::Vector{Int}=[1, 2], bottleneck=NaN)
+                        max_migr::Tuple, r_max_migr::Int64=0, r_coords::Vector{Int}=[1, 2], bottleneck=NaN, verbose=false)
     wlddim = stats.wlddim
     fill!(move, 0)
     
@@ -233,6 +243,10 @@ function calc_migr_dist!(move::Vector{Int16}, deme::Vector{Int}, stats::WorldSta
     for i in 1:length(dir)
         move[i] = dir[i]
     end
+    if verbose
+        println("deme ",deme)
+        println(move)
+    end
     
     # Apply radius constraint if needed
     if r_max_migr > 0
@@ -244,17 +258,25 @@ function calc_migr_dist!(move::Vector{Int16}, deme::Vector{Int}, stats::WorldSta
             move[r_coords] .= 0 # Do [trunc(Int16, factor * move[i]) for i in 1:wlddim] in the future (with multiple-deme jumps)
         end
     end
+    if verbose
+        println(move)
+    end
     
     # Inside certain square check:
-    if isa(max_migr, Tuple)
-        for i in 1:wlddim
-            if !isnan(max_migr[i])
-                try_move = deme[i] + move[i]
-                if try_move > max_migr[i] || try_move < 1
-                    move[i] = 0
-                end
+    for i in 1:wlddim
+        try_move = deme[i] + move[i]
+        if isa(max_migr, Tuple) && !isnan(max_migr[i])
+            if try_move > max_migr[i]
+                move[i] = 0
             end
         end
+        if try_move < 1
+            move[i] = 0
+        end
+    end
+    if verbose
+        println(move)
+        println("--")
     end
 
     # Bottleneck barrier check:
@@ -715,7 +737,7 @@ Fills random demes within given monosome arrays with finite-sites individuals. U
 `n_demes_to_fill`: number of demes to fill
 
 """
-function fill_random_demes(wld_gt1, wld_gt2, wld_stats, fill::Vector{UnitRange{Int64}}, n_demes_to_fill=DEF_N_DEMES_STARTFILL; redims=NaN, verbose=false) # ::Array{Array{Array{Bool}}}
+function fill_random_demes(wld_gt1, wld_gt2, wld_stats, fill::Vector{UnitRange{Int64}}=NaN, n_demes_to_fill=DEF_N_DEMES_STARTFILL; redims=NaN, verbose=false) # ::Array{Array{Array{Bool}}}
 
     possible_init_coords = [collect(x) for x in Iterators.product(fill...)]
     init_coords = sample(possible_init_coords, n_demes_to_fill; replace=false)
@@ -1465,7 +1487,6 @@ function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats::World
                         fixed_mate::Bool=false, premutate::Bool=false, SS::Bool=false, verbose=false)
     
     # Preallocate buffers for migration
-    #println(max_migr)
     move_buffer = zeros(Int16, stats.wlddim)
     wlddim = stats.wlddim
     #Random.seed!(1234)
@@ -1566,7 +1587,7 @@ function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats::World
                     end
 
                     # Calculate migration
-                    calc_migr_dist!(move_buffer, deme, stats, max_migr, r_max_migr)
+                    calc_migr_dist!(move_buffer, deme, stats, max_migr, r_max_migr, r_coords)
                     
                     # Apply migration to calculate new position
                     indices = Vector{Int}(undef, wlddim)
@@ -1691,9 +1712,14 @@ Fills random demes within given monosome arrays with infinite-sites individuals.
 `n_demes_to_fill`: number of demes to fill
 
 """
-function fill_random_demes_inf(wld_gt, wld_stats, fill::Vector{UnitRange{Int64}}, n_demes_to_fill=DEF_N_DEMES_STARTFILL; redims=NaN, verbose=false)
-
-    possible_init_coords = [collect(x) for x in Iterators.product(fill...)]
+function fill_random_demes_inf(wld_gt, wld_stats, fill_iter, n_demes_to_fill=DEF_N_DEMES_STARTFILL; fill_range=NaN, redims=NaN, verbose=false)
+    if !isnothing(fill_iter)
+        possible_init_coords = collect(fill_iter)
+        #wld_stats.startfill = collect(fill_iter)
+    else
+        possible_init_coords = [collect(x) for x in Iterators.product(fill_range...)]
+        wld_stats.startfill = copy(fill_range)
+    end
     if length(possible_init_coords)<n_demes_to_fill
         println("n_demes_to_fill is more than existing demes!")
     end
@@ -1711,7 +1737,7 @@ function fill_random_demes_inf(wld_gt, wld_stats, fill::Vector{UnitRange{Int64}}
     if verbose
         println("Filled ",wld_gt,".")
     end
-    wld_stats.startfill = copy(fill)
+    
     wld_stats.n_demes_startfill = n_demes_to_fill
 end
 
@@ -1789,7 +1815,7 @@ Output: a Dict containing data after the expansion:
 """
 function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), maxi=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, r_coords=[1, 2], capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, 
-    multiproc=true, weightfitn=true, condsel=false, fixed_mate=false, premutate=false, mutratelocus=false,
+    multiproc=true, weightfitn=true, condsel=false, fixed_mate=false, premutate=false, mutratelocus=false,startfill_iter=nothing,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, verbose=false,
     n_segr_regions=DEF_N_SEGR_REGIONS, regions=fill(sel_coef,n_segr_regions), startfill_range=NaN, wld_gt=NaN, wld_stats=NaN, SS=true)
 
@@ -1799,11 +1825,13 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
         wld_gt, wld_stats = create_empty_world_inf(maxi; name=name, capacity=capacity, prolif_rate=prolif_rate,
             mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts,
             n_segr_regions=n_segr_regions, regions=regions, migr_mode=migr_mode)
-        if !isa(startfill_range, Array) && !any(isnan, max_burnin)
+        if isnothing(startfill_iter) && !isa(startfill_range, Array) && !any(isnan, max_burnin)
             startfill_range = [1:upper for upper in max_burnin]
         end
     end
-    println(startfill_range)
+    println("max_burnin ",max_burnin)
+    println("startfill_range ",startfill_range)
+    println("startfill_iter ",startfill_iter)
     wlddim = wld_stats.wlddim
     wld_stats.max_burnin = max_burnin
     wld_stats.max_exp = max_exp
@@ -1827,7 +1855,7 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
             rewld_gt_local[repeat([:],wlddim)...,og] = deepcopy(wld_gt)
         end
         if is_fill_random_demes
-            fill_random_demes_inf(rewld_gt_local, wld_stats, startfill_range; redims=(1), verbose=verbose)
+            fill_random_demes_inf(rewld_gt_local, wld_stats, startfill_iter; redims=(1), fill_range=startfill_range, verbose=verbose)
         end
         
         if out_fields["fitn"][1]
@@ -1882,7 +1910,7 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
                     empty!(rewld_gt_local[deme,2])
                 end
             end
-            
+
             build_next_gen_inf!(g, gg, out_fields, rewld_gt_local, wld_stats, rewld_fitn_local, rewld_pops_local, rewld_mutsdel_local, rewld_mutsben_local;
                 max_migr=max_migr, migr_mode=migr_mode, r_max_migr=r_max_migr, bottleneck=bottleneck, r_coords=r_coords,
                 mutratelocus=mutratelocus, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, premutate=premutate, SS=SS, verbose=verbose)
@@ -2118,20 +2146,19 @@ function rangeexp_cylinder_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N
         startfill_range=startfill_range, SS=SS, verbose=verbose)
 end
 
-function rangeexp_sphere_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,
-    max_burnin=(NaN,NaN), max_exp=(NaN,NaN), maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, n_segr_regions=DEF_N_SEGR_REGIONS,
+function rangeexp_sphere_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, startfill_iter=NaN,
+    max_burnin=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), max_exp=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, n_segr_regions=DEF_N_SEGR_REGIONS,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, premutate=false,
     data_to_generate=DEF_DATA_TO_GENERATE, wld_gt=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, SS=true, verbose=false)
 
-    if !isa(startfill_range, Array)
-        ran = ins_cb(r_max_burnin, r_max_exp)
-        startfill_range = [ran, ran, ran]
+    if iterate(startfill_iter) !== nothing
+        startfill_iter = sphere_lattice_iter(maxi[1]/2,maxi[2]/2,maxi[3]/2,r_max_burnin)
     end
 
     rangeexp_inf(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, r_coords=[1, 2, 3],
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt=wld_gt, wld_stats=wld_stats, name=name, bottleneck=bottleneck, capacity=capacity, prolif_rate=prolif_rate, n_segr_regions=n_segr_regions,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, premutate=premutate,
-        startfill_range=startfill_range, SS=SS, verbose=verbose)
+        startfill_range=startfill_range, SS=SS, verbose=verbose, startfill_iter=startfill_iter)
 end
 
 # Analysis functions
