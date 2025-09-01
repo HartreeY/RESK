@@ -246,11 +246,13 @@ function calc_migr_dist!(move::Vector{Int16}, deme::Vector{Int}, stats::WorldSta
     end
     
     # Inside certain square check:
-    if !any(isnan, max_migr)
+    if isa(max_migr, Tuple)
         for i in 1:wlddim
-            try_move = deme[i] + move[i]
-            if try_move > max_migr[i] || try_move < 1
-                move[i] = 0  # Just stop at boundary
+            if !isnan(max_migr[i])
+                try_move = deme[i] + move[i]
+                if try_move > max_migr[i] || try_move < 1
+                    move[i] = 0
+                end
             end
         end
     end
@@ -1463,6 +1465,7 @@ function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats::World
                         fixed_mate::Bool=false, premutate::Bool=false, SS::Bool=false, verbose=false)
     
     # Preallocate buffers for migration
+    #println(max_migr)
     move_buffer = zeros(Int16, stats.wlddim)
     wlddim = stats.wlddim
     #Random.seed!(1234)
@@ -1567,6 +1570,7 @@ function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats::World
                     
                     # Apply migration to calculate new position
                     indices = Vector{Int}(undef, wlddim)
+
                     for i in 1:wlddim
                         indices[i] = deme[i] + move_buffer[i]
                     end
