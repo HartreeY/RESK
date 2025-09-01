@@ -1,6 +1,7 @@
-using StatsBase, Distributions, Distributed, Random, SpecialFunctions, Serialization, Dates, DataStructures, ThreadsX
+using StatsBase, Distributions, Distributed, Random, Serialization, Dates, DataStructures, ThreadsX #SpecialFunctions
 include("defaults.jl")
 
+const RESK_VERSION = v"0.3.5"
 
 # Constants
 # ------------------------------------------------
@@ -30,28 +31,8 @@ const typ_gt_inf = Array{Array{Array{typ_float}}}
 # Common functions and structures
 # ------------------------------------------------
 
-mutable struct WorldStats
-    name::String
-    max::Tuple
-    capacity::Int
-    prolif_rate::Float64
-    n_segr_regions::Int
-    regions::Vector{Float64}
-    mut_rate::Float64
-    migr_rate::Float64
-    migr_mode::String
-    sel_coef::Float64
-    prop_of_del_muts::Float64
-    wlddim::Int
-    
-    # Optional fields with defaults
-    max_burnin::Tuple
-    max_exp::Tuple
-    n_gens_burnin::Int
-    n_gens_exp::Int
-    n_gens::Int
-    startfill::Vector{UnitRange{Int64}}
-    n_demes_startfill::Int
+function resk_version()
+    return RESK_VERSION
 end
 
 """
@@ -146,16 +127,16 @@ Output 1: array of deme coordinates to be filled in the next generation
 
 Output 2: array of populations for the coordinates in Output 1
 """
-function calc_offspring(wld, stats::WorldStats)
+function calc_offspring(wld, stats)
     next_gen_posits = Vector{Vector{Int}}()
-    next_gen_pops = Array{Int16}(undef, stats.max...)
+    next_gen_pops = Array{Int16}(undef, stats["max"]...)
     fill!(next_gen_pops, -1)
     
-    @inbounds for idx in CartesianIndices(stats.max)
+    @inbounds for idx in CartesianIndices(stats["max"])
         if length(wld[idx]) > 0
             n_ppl_at_deme = length(wld[idx])
-            expected_offspring = n_ppl_at_deme * (stats.prolif_rate / 
-                               (1 + (n_ppl_at_deme * (stats.prolif_rate - 1)) / stats.capacity))
+            expected_offspring = n_ppl_at_deme * (stats["prolif_rate"] / 
+                               (1 + (n_ppl_at_deme * (stats["prolif_rate"] - 1)) / stats["capacity"]))
             
             next_gen_pops[idx] = rand(Poisson(expected_offspring))
             if next_gen_pops[idx] > 0
@@ -201,13 +182,13 @@ Calculates an individual's migration distance. Used when building the next gener
 
 Output: array of the amount of demes moved per each coordinate
 """
-function calc_migr_dist!(move::Vector{Int16}, deme::Vector{Int}, stats::WorldStats, 
+function calc_migr_dist!(move::Vector{Int16}, deme::Vector{Int}, stats, 
                         max_migr::Tuple, r_max_migr::Int64=0, r_coords::Vector{Int}=[1, 2], bottleneck=NaN, verbose=false)
-    wlddim = stats.wlddim
+    wlddim = stats["wlddim"]
     fill!(move, 0)
     
     # Early return if no migration
-    if rand() >= stats.migr_rate
+    if rand() >= stats["migr_rate"]
         return
     end
     
@@ -217,10 +198,10 @@ function calc_migr_dist!(move::Vector{Int16}, deme::Vector{Int}, stats::WorldSta
         dir = rand() < 0.5 ? MIGR_DIRS_ORT_1D[1] : MIGR_DIRS_ORT_1D[2]
     elseif wlddim == 2
         # 2D case
-        if stats.migr_mode == "hex"
+        if stats["migr_mode"] == "hex"
             dir_idx = rand(1:length(MIGR_DIRS_HEX_2D))
             dir = MIGR_DIRS_HEX_2D[dir_idx]
-        elseif stats.migr_mode == "all"
+        elseif stats["migr_mode"] == "all"
             if rand() < 0.5
                 dir_idx = rand(1:length(MIGR_DIRS_ORT_2D))
                 dir = MIGR_DIRS_ORT_2D[dir_idx]
@@ -250,7 +231,7 @@ function calc_migr_dist!(move::Vector{Int16}, deme::Vector{Int}, stats::WorldSta
     
     # Apply radius constraint if needed
     if r_max_migr > 0
-        r_arr = [(deme[i] - (stats.max[i]-1)/2 + move[i] - 1)^2 for i in r_coords]
+        r_arr = [(deme[i] - (stats["max"][i]-1)/2 + move[i] - 1)^2 for i in r_coords]
         r2 = sum(r_arr)
         
         if r2 > r_max_migr * r_max_migr
@@ -307,6 +288,34 @@ end
 # Simulation functions (finite-sites)
 # ------------------------------------------------
 
+function calc_fitness(deme_ms1, deme_ms2, domin_coef, loci, sel_loci=[])
+    fits = Vector{typ_float}(undef, length(deme_ms1))
+    n_loci = length(loci)
+
+    for i in 1:length(deme_ms1)
+        new_fitness = 1.0
+
+        for j in 1:n_loci
+            if deme_ms1[i][j] == true && deme_ms2[i][j] == true
+                if j in sel_loci
+                    new_fitness *= 1 - loci[j]
+                end
+
+            elseif deme_ms1[i][j] == true || deme_ms2[i][j] == true
+                if j in sel_loci
+                    new_fitness *= 1 - domin_coef * loci[j]
+                end
+            end
+        end
+        fits[i]=new_fitness
+    end
+    return fits
+end
+
+function calc_fitness(deme_ms1, deme_ms2, wld_stats)
+    calc_fitness(deme_ms1, deme_ms2, wld_stats["domin_coef"], wld_stats["loci"], wld_stats["sel_loci"])
+end
+
 """
 Calculates the number of mutations and average fitness within a deme. Used when building the next generation in finite-sites expansions.
 
@@ -338,8 +347,8 @@ Output 6: average number of neutral aa mutations in this deme
 
 Output 7: average fitness in this deme
 """
-function calc_muts_and_fitn_in_deme(deme_ms1, deme_ms2, domin_coef, loci, sel_loci=[])
-    fits = []
+function calc_fitness_and_states(deme_ms1, deme_ms2, domin_coef, loci, sel_loci=[])
+    fits = Vector{typ_float}(undef, length(deme_ms1))
     n_loci = length(loci)
 
     cAA = zeros(n_loci)
@@ -365,15 +374,14 @@ function calc_muts_and_fitn_in_deme(deme_ms1, deme_ms2, domin_coef, loci, sel_lo
                 caa[j] += 1
             end
         end
-
-        push!(fits, new_fitness)
+        fits[i]=new_fitness
     end
 
-    return cAA, cAa, caa, fits
+    return fits, cAA, cAa, caa
 end
 
-function calc_muts_and_fitn_in_deme(deme_ms1, deme_ms2, wld_stats)
-    calc_muts_and_fitn_in_deme(deme_ms1, deme_ms2, wld_stats["domin_coef"], wld_stats["loci"], wld_stats["sel_loci"])
+function calc_fitness_and_states(deme_ms1, deme_ms2, wld_stats)
+    calc_fitness_and_states(deme_ms1, deme_ms2, wld_stats["domin_coef"], wld_stats["loci"], wld_stats["sel_loci"])
 end
 
 """
@@ -389,7 +397,8 @@ Randomly mutates at selected loci. Used when building the next generation in fin
 
 `n_loci`: number of loci
 """
-function mutate(ms1, ms2, mut_rate, n_loci; mutratelocus=false)
+function mutate!(ms1, ms2, mut_rate, n_loci; mutratelocus=false)
+    muts = 0
     get_mutation_random = mutratelocus ? rand(Poisson(mut_rate*n_loci)) : rand(Poisson(mut_rate))
     @fastmath @inbounds for _ in 1:get_mutation_random
         pos_alter = sample(1:n_loci)
@@ -399,11 +408,13 @@ function mutate(ms1, ms2, mut_rate, n_loci; mutratelocus=false)
         else
             ms2[pos_alter] = true
         end
+        muts += 1
     end
+    return muts
 end
 
-function mutate(ms1, ms2, wld_stats; mutratelocus=false)
-    mutate(ms1, ms2, wld_stats["mut_rate"], wld_stats["n_loci"]; mutratelocus=mutratelocus)
+function mutate!(ms1, ms2, wld_stats; mutratelocus=false)
+    return mutate!(ms1, ms2, wld_stats["mut_rate"], wld_stats["n_loci"]; mutratelocus=mutratelocus)
 end
 
 """
@@ -419,7 +430,7 @@ Recombines loci with a 1/2 chance. Used when building the next generation in fin
 
 `n_loci`: number of loci
 """
-function crossover(ms1, ms2, n_loci)
+function crossover!(ms1, ms2, n_loci)
     for j in 1:n_loci
         lr = rand(1:2)
         ms1[j] = lr == 1 ? ms1[j] : ms2[j]
@@ -512,133 +523,135 @@ Output 9: a spatial array of demes with average neutral Aa mutation count in the
 
 Output 10: a spatial array of demes with average neutral aa mutation count in the new generation
 """
-function build_next_gen(wld_gt1, wld_gt2, wld_stats, fitn_out=false, pops_out=false, mut_out=false, cnt_out=false;
-    max_migr=NaN, migr_mode=DEF_MIGR_MODE, bottleneck=NaN, refl_walls=false, r_max_migr=0, r_coords=[1, 2], mutratelocus=false, relcnt=true, weightfitn=true, premutate=false)
+function build_next_gen!(g, gg, out_fields, wld_gt1::typ_gt, wld_gt2::typ_gt, stats, wld_fitn=NaN, wld_pops=NaN, wld_cAA=NaN, wld_cAa=NaN, wld_caa=NaN, wld_AA=NaN, wld_Aa=NaN, wld_aa=NaN;
+    max_migr::Tuple=stats["max"], migr_mode=DEF_MIGR_MODE, r_max_migr::Int64=0, bottleneck=NaN, refl_walls=false, r_coords::Array{Int}=[1, 2], 
+    weightfitn::Bool=true, condsel::Bool=false, mutratelocus::Bool=false,
+    fixed_mate::Bool=false, premutate::Bool=false, SS::Bool=false, verbose=false)
 
-    wlddim = wld_stats["wlddim"]
+    # Preallocate buffers for migration
+    move_buffer = zeros(Int16, stats["wlddim"])
+    wlddim = stats["wlddim"]
+    #Random.seed!(1234)
 
-    # Determine the number of offspring for each deme
-    next_gen_posits, next_gen_pops = calc_offspring(wld_gt1, wld_stats)
-
-    # Define the world (as an array [=demes] of arrays [=individs] of two Bool arrays [=monosomes]) and the data arrays in the next generation
-    wld_gt1_next = Array{Array{Array{Bool}},wlddim}(undef, wld_stats["max"]...) #deepcopy(wld_gt1)
-    wld_gt2_next = Array{Array{Array{Bool}},wlddim}(undef, wld_stats["max"]...) #deepcopy(wld_gt2)
-    for k in Iterators.product([1:n for n in wld_stats["max"]]...)
-        wld_gt1_next[k...] = Array{Bool,1}[]
-        wld_gt2_next[k...] = Array{Bool,1}[]
-    end
-    wld_fitn_next = NaN
-    wld_pops_next = NaN
-    wld_AA_next = NaN
-    wld_Aa_next = NaN
-    wld_aa_next = NaN
-    wld_cAA_next = NaN
-    wld_cAa_next = NaN
-    wld_caa_next = NaN
-    all_birth_count = 0
-
-    # Fill the next generation habitat
-    if fitn_out
-        wld_fitn_next = Array{typ_float}(undef, wld_stats["max"]...)
-        fill!(wld_fitn_next, NaN)
-    end
-    if pops_out
-        wld_pops_next = Array{typ_float}(undef, wld_stats["max"]...)
-        fill!(wld_pops_next, NaN)
-    end
-    if cnt_out
-        wld_cAA_next = Array{typ_float}(undef, wld_stats["max"]...,wld_stats["n_loci"])
-        wld_cAa_next = Array{typ_float}(undef, wld_stats["max"]...,wld_stats["n_loci"])
-        wld_caa_next = Array{typ_float}(undef, wld_stats["max"]...,wld_stats["n_loci"])
-        fill!(wld_cAA_next, NaN)
-        fill!(wld_cAa_next, NaN)
-        fill!(wld_caa_next, NaN)
-    end
-    if mut_out
-        wld_AA_next = Array{typ_float}(undef, wld_stats["max"]...)
-        wld_Aa_next = Array{typ_float}(undef, wld_stats["max"]...)
-        wld_aa_next = Array{typ_float}(undef, wld_stats["max"]...)
-        fill!(wld_AA_next, NaN)
-        fill!(wld_Aa_next, NaN)
-        fill!(wld_aa_next, NaN)
+    # Calculate offspring counts
+    next_gen_posits, next_gen_pops = calc_offspring(wld_gt1[repeat([:],wlddim)...,gg], stats)
+    if verbose
+        println("g=",g, ", gg=",gg,", pops=", next_gen_pops)
     end
 
+    # Process each deme
     for deme in next_gen_posits
-        ms1_at_pos = wld_gt1[deme...]
-        ms2_at_pos = wld_gt2[deme...]
+        ms1_at_pos = wld_gt1[deme...,gg]
+        ms2_at_pos = wld_gt2[deme...,gg]
 
-        fitns = [] # Optimize ???
-        cAA, cAa, caa, fitns =
-            calc_muts_and_fitn_in_deme(ms1_at_pos, ms2_at_pos, wld_stats)
-
-        if fitn_out
-            wld_fitn_next[deme...] = mean(fitns)
-        end
-        if cnt_out
-            lenn = length(ms1_at_pos)
-            wld_cAA_next[deme...,:] = relcnt ? cAA/lenn : cAA
-            wld_cAa_next[deme...,:] = relcnt ? cAa/lenn : cAa
-            wld_caa_next[deme...,:] = relcnt ? caa/lenn : caa
-        end
-        if mut_out
-            lenn = length(ms1_at_pos)
-            wld_AA_next[deme...] = relcnt ? sum(cAA)/wld_stats["n_loci"]/lenn : sum(cAA)/wld_stats["n_loci"]
-            wld_Aa_next[deme...] = relcnt ? sum(cAa)/wld_stats["n_loci"]/lenn : sum(cAa)/wld_stats["n_loci"]
-            wld_aa_next[deme...] = relcnt ? sum(caa)/wld_stats["n_loci"]/lenn : sum(caa)/wld_stats["n_loci"]
-        end
-
+        # Calculate fitnesses once
+        fitnesses = calc_fitness(ms1_at_pos, ms2_at_pos, stats)
         
         next_generation_size = next_gen_pops[deme...]
 
         if next_generation_size > 0
-            
-            birth_count = 0
-            for _ in 1:next_generation_size
-                
-                mom_ms1 = weightfitn ? wsample(ms1_at_pos, (typ_float).(fitns)) : sample(ms1_at_pos)
-                mom_ms2 = weightfitn ? wsample(ms2_at_pos, (typ_float).(fitns)) : sample(ms2_at_pos)
-                dad_ms1 = weightfitn ? wsample(ms1_at_pos, (typ_float).(fitns)) : sample(ms1_at_pos)
-                dad_ms2 = weightfitn ? wsample(ms2_at_pos, (typ_float).(fitns)) : sample(ms2_at_pos)
-
-                gamete_mom_ms1 = copy(mom_ms1)
-                gamete_dad_ms1 = copy(dad_ms1)
-                gamete_mom_ms2 = copy(mom_ms2)
-                gamete_dad_ms2 = copy(dad_ms2)
-
-                if premutate
-                    mutate(gamete_mom_ms1, gamete_mom_ms2, wld_stats; mutratelocus=mutratelocus)
-                    mutate(gamete_dad_ms1, gamete_dad_ms2, wld_stats; mutratelocus=mutratelocus)
-                    crossover(gamete_mom_ms1, gamete_mom_ms2, wld_stats["n_loci"])
-                    crossover(gamete_dad_ms1, gamete_dad_ms2, wld_stats["n_loci"])
+            # Create births
+            k = 0
+            @inbounds while k < next_generation_size
+                # Select parents
+                mom_idx, dad_idx = 1, 1
+                if weightfitn
+                    mom_idx = wsample(1:length(ms1_at_pos), fitnesses)
+                    dad_idx = wsample(1:length(ms1_at_pos), fitnesses)
                 else
-                    crossover(gamete_mom_ms1, gamete_mom_ms2, wld_stats["n_loci"])
-                    crossover(gamete_dad_ms1, gamete_dad_ms2, wld_stats["n_loci"])
-                    mutate(gamete_mom_ms1, gamete_mom_ms2, wld_stats; mutratelocus=mutratelocus)
-                    mutate(gamete_dad_ms1, gamete_dad_ms2, wld_stats; mutratelocus=mutratelocus)
+                    mom_idx = rand(1:length(ms1_at_pos))
+                    dad_idx = rand(1:length(ms1_at_pos))
                 end
+                mom_ms1 = ms1_at_pos[mom_idx]
+                mom_ms2 = ms2_at_pos[mom_idx]
+                dad_ms1 = ms1_at_pos[dad_idx]
+                dad_ms2 = ms2_at_pos[dad_idx]
 
-                move = calc_migr_dist(deme, wld_stats, migr_mode, bottleneck, max_migr, refl_walls, r_max_migr, r_coords)
+                if !condsel || (fitnesses[mom_idx] > thing1*maximum(fitnesses) && 
+                    fitnesses[dad_idx] > thing2*maximum(fitnesses))
+                    k+=1
+                    # Create gametes with recombination
+                    gamete_mom_ms1 = copy(mom_ms1)
+                    gamete_dad_ms1 = copy(dad_ms1)
+                    gamete_mom_ms2 = copy(mom_ms2)
+                    gamete_dad_ms2 = copy(dad_ms2)
+                    
+                    # Apply recombination
+                    crossover!(gamete_mom_ms1, gamete_mom_ms2, stats["n_loci"])
+                    crossover!(gamete_dad_ms1, gamete_dad_ms2, stats["n_loci"])
 
-                indices = [deme[i] + move[i] for i in 1:wlddim]
+                    mut_cnt = mutate!(gamete_mom_ms1, gamete_dad_ms2, stats; mutratelocus=mutratelocus)
 
-                if !isassigned(wld_gt1_next, indices...)
-                    wld_gt1_next[indices...] = []
-                    wld_gt2_next[indices...] = []
+#=                     if out_fields["mutcnt"][1]
+                        if !out_fields["mutcnt"][2]
+                            G = g
+                        elseif g == stats["n_gens"]
+                            G = 1
+                        end
+                        if !isnan(wld_mutcnt)
+                            if isnan(wld_mutcnt[deme...,G])
+                                wld_mutsben[deme...,G] = 0
+                            end
+                            wld_mutcnt[deme...,G] += mut_cnt
+                        end
+                    end =#
+
+                    # Calculate migration
+                    calc_migr_dist!(move_buffer, deme, stats, max_migr, r_max_migr, r_coords)
+
+                    # Apply migration to calculate new position
+                    indices = Vector{Int}(undef, wlddim)
+
+                    for i in 1:wlddim
+                        indices[i] = deme[i] + move_buffer[i]
+                    end
+                    
+                    # Add offspring to next generation
+                    push!(wld_gt1[indices...,gg+1], copy(gamete_mom_ms1))
+                    push!(wld_gt2[indices...,gg+1], copy(gamete_dad_ms2))
+
+                    if verbose
+                        println("Completed birth #",k," rand()=",rand(1))
+                    end
+                elseif !SS
+                    k+=1
                 end
-                push!(wld_gt1_next[indices...], gamete_mom_ms1)
-                push!(wld_gt2_next[indices...], gamete_dad_ms2)
-
-                birth_count += 1
-                all_birth_count += 1
             end
-
-            if pops_out
-                wld_pops_next[deme...] = birth_count
+        end
+        if out_fields["pops"][1]
+            G = out_fields["pops"][2] ? g+1 : 1
+            wld_pops[deme...,G]=length(wld_gt1[deme...,gg+1])
+        end
+        if out_fields["fitn"][1] || out_fields["cAA"][1] || out_fields["cAa"][1] || out_fields["caa"][1] || out_fields["AA"][1] || out_fields["Aa"][1] || out_fields["aa"][1]
+            fitn,cAA,cAa,caa = calc_fitness_and_states(wld_gt1[deme...,gg+1],wld_gt2[deme...,gg+1],stats)
+            if out_fields["fitn"][1]
+                G = out_fields["fitn"][2] ? g+1 : 1
+                wld_fitn[deme...,G]=mean(fitn)
+            end
+            if out_fields["cAA"][1]
+                G = out_fields["cAA"][2] ? g+1 : 1
+                wld_cAA[deme...,G]=cAA
+            end
+            if out_fields["cAa"][1]
+                G = out_fields["cAa"][2] ? g+1 : 1
+                wld_cAa[deme...,G]=cAa
+            end
+            if out_fields["caa"][1]
+                G = out_fields["caa"][2] ? g+1 : 1
+                wld_caa[deme...,G]=caa
+            end
+            if out_fields["AA"][1] # Do we need separate outputs? Thatll be verbose for the user to type as a data_to_output
+                G = out_fields["AA"][2] ? g+1 : 1
+                wld_AA[deme...,G] = relcnt ? sum(cAA)/wld_stats["n_loci"]/lenn : sum(cAA)/wld_stats["n_loci"]
+                #wld_Aa[deme...,G] = relcnt ? sum(cAa)/wld_stats["n_loci"]/lenn : sum(cAa)/wld_stats["n_loci"]
+                #wld_aa[deme...,G] = relcnt ? sum(caa)/wld_stats["n_loci"]/lenn : sum(caa)/wld_stats["n_loci"]
             end
         end
     end
 
-    return wld_gt1_next, wld_gt2_next, wld_fitn_next, wld_pops_next, wld_AA_next, wld_Aa_next, wld_aa_next, wld_cAA_next, wld_cAa_next, wld_caa_next
+    if verbose
+        println("--------------------")
+    end
 end
 
 """
@@ -687,22 +700,22 @@ Output 2: a spatial array of demes that contain individuals' right monosome [Boo
 Output 3: world stats Dict
 
 """
-function create_empty_world(max::Tuple=(DEF_X_MAX, DEF_Y_MAX); name::String=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), capacity=DEF_CAPACITY,
+function create_empty_world(maxi=(DEF_X_MAX, DEF_Y_MAX); min=(1, 1), name="sim_$(Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"))", capacity=DEF_CAPACITY,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, migr_mode=DEF_MIGR_MODE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS,
     prolif_rate=DEF_PROLIF_RATE, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci))
 
-    wld_gt1 = (typ_gt)(undef, max...) # array of left (in a pair) monosomes ("ms") of all individuals in space
-    wld_gt2 = (typ_gt)(undef, max...) # array of right (in a pair) monosomes ("ms") of all individuals in space
+    wld_gt1 = (typ_gt)(undef, maxi...) # array of left (in a pair) monosomes ("ms") of all individuals in space
+    wld_gt2 = (typ_gt)(undef, maxi...) # array of right (in a pair) monosomes ("ms") of all individuals in space
 
-    for k in Iterators.product([1:n for n in max]...)
-        wld_gt1[k...] = Array{Bool,1}[]
-        wld_gt2[k...] = Array{Bool,1}[]
+    for k in CartesianIndices(maxi)
+        wld_gt1[k] = Array{Bool,1}[]
+        wld_gt2[k] = Array{Bool,1}[]
     end
 
     wld_stats = OrderedDict(
         "name" => name,
         #"min" => min,
-        "max" => max,
+        "max" => maxi,
         "capacity" => capacity,
         "prolif_rate" => prolif_rate,
         "loci" => loci,
@@ -714,7 +727,7 @@ function create_empty_world(max::Tuple=(DEF_X_MAX, DEF_Y_MAX); name::String=Date
         "sel_coef" => sel_coef,
         "domin_coef" => domin_coef,
         "prop_of_del_muts" => prop_of_del_muts,
-        "wlddim" => length(max)
+        "wlddim" => length(maxi)
         #"rangeexps" => []
     )
 
@@ -737,24 +750,36 @@ Fills random demes within given monosome arrays with finite-sites individuals. U
 `n_demes_to_fill`: number of demes to fill
 
 """
-function fill_random_demes(wld_gt1, wld_gt2, wld_stats, fill::Vector{UnitRange{Int64}}=NaN, n_demes_to_fill=DEF_N_DEMES_STARTFILL; redims=NaN, verbose=false) # ::Array{Array{Array{Bool}}}
+function fill_random_demes(wld_gt1, wld_gt2, wld_stats, fill_iter, n_demes_to_fill=DEF_N_DEMES_STARTFILL; fill_range=NaN, redims=NaN, verbose=false)
+    if !isnothing(fill_iter)
+        possible_init_coords = collect(fill_iter)
+        #wld_stats["startfill"] = collect(fill_iter)
+    else
+        possible_init_coords = [collect(x) for x in Iterators.product(fill_range...)]
+        wld_stats["startfill"] = copy(fill_range)
+    end
 
-    possible_init_coords = [collect(x) for x in Iterators.product(fill...)]
+    if length(possible_init_coords)<n_demes_to_fill
+        println("n_demes_to_fill is more than existing demes!")
+    end
+
     init_coords = sample(possible_init_coords, n_demes_to_fill; replace=false)
     wld_stats["sel_loci"] = randperm(wld_stats["n_loci"])[1:wld_stats["n_sel_loci"]]
 
+    if verbose
+        println("Filling ",first(wld_gt1,5)," & ",first(wld_gt2,5)," .")
+    end
+
     for coord in init_coords
-        if !isassigned(wld_gt1, coord...)
-            wld_gt1[coord...,redims...] = []
-            wld_gt2[coord...,redims...] = []
-        end
         for _ in 1:wld_stats["capacity"]
             push!(wld_gt1[coord...,redims...], falses(wld_stats["n_loci"]))
             push!(wld_gt2[coord...,redims...], falses(wld_stats["n_loci"]))
         end
     end
-
-    wld_stats["startfill"] = copy(fill)
+    if verbose
+        println("Filled ",first(wld_gt1,5)," & ",first(wld_gt2,5)," .")
+    end
+    
     wld_stats["n_demes_startfill"] = n_demes_to_fill
 end
 
@@ -824,47 +849,23 @@ Output: a Dict containing data after the expansion:
 - **fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
 function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), maxi=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
-    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, r_coords=[1, 2], capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE,
-    mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci), mutratelocus=false, weightfitn=true, premutate=false,
-    startfill_range=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN)
-
-    #= if n_re>1
-        procs = addprocs(n_re)
-        for k in 1:length(procs)
-            @spawnat procs[k] include("../resk.jl")
-        end
-    end =#
-
-#=     function distribute_task(tsk)
-        if n_re>1 && multiproc
-            @sync begin
-                @inbounds for j in 1:n_re
-                    @spawn begin
-                        for g in 1:n_gens
-                            tsk(g,j)
-                        end
-                    end
-                end
-            end
-            #rmprocs(n_re)
-        else
-            @inbounds for j in 1:n_re, g in 1:n_gens
-                tsk(g,j)
-            end
-        end
-    end =#
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, r_coords=[1, 2], capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, verbose=false,
+    mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci), mutratelocus=false, weightfitn=true, premutate=false, condsel=false, fixed_mate=false, startfill_iter=nothing,
+    startfill_range=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, SS=true)
     
     if isnan(wld_gt1)
         is_fill_random_demes = true
         #println("No world provided. Creating a new world.")
         wld_gt1, wld_gt2, wld_stats = create_empty_world(maxi; name=name, capacity=capacity, prolif_rate=prolif_rate, 
-        mut_rate=mut_rate, migr_rate=migr_rate, migr_mode=migr_mode, sel_coef=sel_coef, domin_coef=domin_coef,
+        mut_rate=mut_rate, migr_rate=migr_rate, migr_mode=migr_mode, sel_coef=sel_coef, prop_of_del_muts=prop_of_del_muts, domin_coef=domin_coef,
             n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci)
-        if !isa(startfill_range, Array) && !any(isnan, max_burnin)
-            startfill_range = [1:upper for upper in max_burnin]
-        end
+            if isnothing(startfill_iter) && !isa(startfill_range, Array) && !any(isnan, max_burnin)
+                startfill_range = [1:upper for upper in max_burnin]
+            end
     end
-
+    println("max_burnin ",max_burnin)
+    println("startfill_range ",startfill_range)
+    println("startfill_iter ",startfill_iter)
     wlddim = wld_stats["wlddim"]
     wld_stats["max_burnin"] = max_burnin
     wld_stats["max_exp"] = max_exp
@@ -879,50 +880,47 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
     out_fields = OrderedDict{String, Any}("gt1" => check_what_output("G"), "gt2" => check_what_output("G"), "fitn" => check_what_output("F"), "pops" => check_what_output("P"),
         "cAA" => check_what_output("C"),"cAa" => check_what_output("C"),"caa" => check_what_output("C"), "AA" => check_what_output("A"), "Aa" => check_what_output("A"), "aa" => check_what_output("A"))
 
-
-#=     if occursin("C", data_to_generate)
-        cnt_out = true
-        cond_n_gens = occursin("Cl", data_to_generate) ? 1 : n_gens
-        rewld_cAA = Array{Array{Float32}}(wld_stats["max"]..., cond_n_gens, n_re) # (wld_stats["max"]..., wld_stats["n_loci"], cond_n_gens, n_re)
-        rewld_cAa = Array{Array{Float32}}(wld_stats["max"]..., cond_n_gens, n_re)
-        rewld_caa = Array{Array{Float32}}(wld_stats["max"]..., cond_n_gens, n_re)
-    end
-    if occursin("M", data_to_generate)
-        mut_out = true
-        cond_n_gens = occursin("Ml", data_to_generate) ? 1 : n_gens
-        rewld_AA = Array{Float32}(wld_stats["max"]..., cond_n_gens, n_re)
-        rewld_Aa = Array{Float32}(wld_stats["max"]..., cond_n_gens, n_re)
-        rewld_aa = Array{Float32}(wld_stats["max"]..., cond_n_gens, n_re)
-    end =#
-
     function tsk_re(_proc_no=NaN)
-        #println(out_fields["fitn"][2])
-        cond_n_gens = out_fields["gt1"][1] && !out_fields["gt1"][2] ? 1 : n_gens
+        cond_n_gens = out_fields["gt1"][1] && out_fields["gt1"][2] ? n_gens+1 : 2
         rewld_gt1_local = (typ_gt)(undef, wld_stats["max"]..., cond_n_gens)
         rewld_gt2_local = (typ_gt)(undef, wld_stats["max"]..., cond_n_gens)
 
         rewld_gt1_local[repeat([:],wlddim)...,1] = deepcopy(wld_gt1)
         rewld_gt2_local[repeat([:],wlddim)...,1] = deepcopy(wld_gt2)
+        for og in 2:cond_n_gens
+            rewld_gt1_local[repeat([:],wlddim)...,og] = deepcopy(wld_gt1)
+            rewld_gt2_local[repeat([:],wlddim)...,og] = deepcopy(wld_gt2)
+        end
         if is_fill_random_demes
-            fill_random_demes(rewld_gt1_local, rewld_gt2_local, wld_stats, startfill_range; redims=(1))
+            fill_random_demes(rewld_gt1_local, rewld_gt2_local, wld_stats, startfill_iter; redims=(1), fill_range=startfill_range, verbose=verbose)
         end
         
         if out_fields["fitn"][1]
-            cond_n_gens = out_fields["fitn"][2] ? 1 : n_gens
+            cond_n_gens = out_fields["fitn"][2] ? n_gens+1 : 1
             rewld_fitn_local = Array{typ_float}(undef, wld_stats["max"]..., cond_n_gens)
             fill!(rewld_fitn_local,NaN)
+            if out_fields["fitn"][2]
+                for deme in CartesianIndices(maxi)
+                    rewld_fitn_local[deme,1] = mean(calc_fitness(rewld_gt1_local[deme,1],rewld_gt2_local[deme,1],wld_stats))
+                end
+            end
         else
             rewld_fitn_local = NaN
         end
         if out_fields["pops"][1]
-            cond_n_gens = out_fields["pops"][2] ? 1 : n_gens
+            cond_n_gens = out_fields["pops"][2] ? n_gens+1 : 1
             rewld_pops_local = Array{typ_float}(undef, wld_stats["max"]..., cond_n_gens)
             fill!(rewld_pops_local,NaN)
+            if out_fields["pops"][2]
+                for deme in CartesianIndices(maxi)
+                    rewld_pops_local[deme,1] = length(rewld_gt1_local[deme,1])
+                end
+            end
         else
             rewld_pops_local = NaN
         end
         if out_fields["cAA"][1]
-            cond_n_gens = out_fields["cAA"][2] ? 1 : n_gens
+            cond_n_gens = out_fields["cAA"][2] ? n_gens+1 : 1
             rewld_cAA_local = Array{typ_float}(undef, wld_stats["max"]..., wld_stats["n_loci"], cond_n_gens)
             rewld_cAa_local = Array{typ_float}(undef, wld_stats["max"]..., wld_stats["n_loci"], cond_n_gens)
             rewld_caa_local = Array{typ_float}(undef, wld_stats["max"]..., wld_stats["n_loci"], cond_n_gens)
@@ -935,7 +933,7 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
             rewld_caa_local = NaN
         end
         if out_fields["AA"][1]
-            cond_n_gens = out_fields["AA"][2] ? 1 : n_gens
+            cond_n_gens = out_fields["AA"][2] ? n_gens+1 : 1
             rewld_AA_local = Array{typ_float}(undef, wld_stats["max"]..., cond_n_gens)
             rewld_Aa_local = Array{typ_float}(undef, wld_stats["max"]..., cond_n_gens)
             rewld_aa_local = Array{typ_float}(undef, wld_stats["max"]..., cond_n_gens)
@@ -957,53 +955,19 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
                 r_max_migr = r_max_exp
             end
 
-            condi = out_fields["gt1"][1] && !out_fields["gt1"][2]
+            condi = out_fields["gt1"][1] && out_fields["gt1"][2]
             gg = condi ? g : 1
 
-            wld_gt1_next, wld_gt2_next, wld_fitn_next, wld_pops_next, wld_AA_next, wld_Aa_next, wld_aa_next, wld_cAA_next, wld_cAa_next, wld_caa_next = build_next_gen(
-                rewld_gt1_local[repeat([:],wlddim)...,max(gg-1,1)], rewld_gt2_local[repeat([:],wlddim)...,max(gg-1,1)], wld_stats, 
-                out_fields["fitn"][1], out_fields["pops"][1], out_fields["AA"][1], out_fields["cAA"][1]; weightfitn=weightfitn, premutate=premutate,
-                max_migr=max_migr, migr_mode=migr_mode, bottleneck=bottleneck, r_max_migr=r_max_migr, r_coords=r_coords, mutratelocus=mutratelocus)
+            build_next_gen!(g, gg, out_fields, rewld_gt1_local, rewld_gt2_local, wld_stats, rewld_fitn_local, rewld_pops_local, rewld_cAA_local, rewld_cAa_local, rewld_caa_local, rewld_AA_local, rewld_Aa_local, rewld_aa_local;
+            max_migr=max_migr, migr_mode=migr_mode, r_max_migr=r_max_migr, bottleneck=bottleneck, r_coords=r_coords,
+            mutratelocus=mutratelocus, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, 
+            premutate=premutate, SS=SS, verbose=verbose)
 
-            #print(wld_gt1_next)
-            rewld_gt1_local[repeat([:],wlddim)...,gg] = wld_gt1_next
-            rewld_gt2_local[repeat([:],wlddim)...,gg] = wld_gt2_next
+            if !condi
+                rewld_gt1_local[repeat([:],wlddim)...,1],rewld_gt1_local[repeat([:],wlddim)...,2] = rewld_gt1_local[repeat([:],wlddim)...,2],rewld_gt1_local[repeat([:],wlddim)...,1]
+                rewld_gt2_local[repeat([:],wlddim)...,1],rewld_gt2_local[repeat([:],wlddim)...,2] = rewld_gt2_local[repeat([:],wlddim)...,2],rewld_gt2_local[repeat([:],wlddim)...,1]
 
-            if out_fields["fitn"][1]
-                if !out_fields["fitn"][2]
-                    rewld_fitn_local[repeat([:],wlddim)...,g] = wld_fitn_next
-                elseif g == n_gens
-                    rewld_fitn_local[repeat([:],wlddim)...,1] = wld_fitn_next
-                end
-            end
-            if out_fields["pops"][1]
-                if !out_fields["pops"][2]
-                    rewld_pops_local[repeat([:],wlddim)...,g] = wld_pops_next
-                elseif g == n_gens
-                    rewld_pops_local[repeat([:],wlddim)...,1] = wld_pops_next
-                end
-            end
-            if out_fields["AA"][1]
-                if !out_fields["AA"][2]
-                    rewld_AA_local[repeat([:],wlddim)...,g] = wld_AA_next
-                    rewld_Aa_local[repeat([:],wlddim)...,g] = wld_Aa_next
-                    rewld_aa_local[repeat([:],wlddim)...,g] = wld_aa_next
-                elseif g == n_gens
-                    rewld_AA_local[repeat([:],wlddim)...,1] = wld_AA_next
-                    rewld_Aa_local[repeat([:],wlddim)...,1] = wld_Aa_next
-                    rewld_aa_local[repeat([:],wlddim)...,1] = wld_aa_next
-                end
-            end
-            if out_fields["cAA"][1]
-                if !out_fields["cAA"][2]
-                    rewld_cAA_local[repeat([:],wlddim+1)...,g] = wld_cAA_next
-                    rewld_cAa_local[repeat([:],wlddim+1)...,g] = wld_cAa_next
-                    rewld_caa_local[repeat([:],wlddim+1)...,g] = wld_caa_next
-                elseif g == n_gens
-                    rewld_cAA_local[repeat([:],wlddim+1)...,1] = wld_cAA_next
-                    rewld_cAa_local[repeat([:],wlddim+1)...,1] = wld_cAa_next
-                    rewld_caa_local[repeat([:],wlddim+1)...,1] = wld_caa_next
-                end
+            
             end
         end
 
@@ -1011,61 +975,45 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
         "cAA" => rewld_cAA_local, "cAa" => rewld_cAa_local, "caa" => rewld_caa_local)
     end
 
-    #distribute_task(tsk_buildnextgen)
+    extra_dim = 1
 
     if n_re > 1
+        extra_dim += 1
         if multiproc
-            #temp_procs = addprocs(n_re-1)
-            #for k in temp_procs
-            #    @spawnat k include("../resk.jl")
-            #end
-            @everywhere include(@__FILE__)
-            dicts_out = pmap(tsk_re, 1:n_re) # uses workers, confirmed
             npcs = workers()
-            println("Running $n_re replicates on $npcs processes.")
-            #rmprocs(temp_procs)
+            println("Running $n_re replicates on processes $npcs.")
+            dicts_out,t = @timed pmap(tsk_re, 1:n_re)
+            println("Simulated in ",t," s.")
         else
-            dicts_out = ThreadsX.map(p->tsk_re(), 1:n_re)
             println("Using all threads.")
+            dicts_out = ThreadsX.map(p->tsk_re(), 1:n_re)
         end
     else
-        dicts_out = [tsk_re()]
+        dicts_out,t = @timed [tsk_re()]
+        println("Simulated in ",t," s.")
     end
 
-
-    #= append!(wld_stats["rangeexps"],Dict(
-        "x_max_burnin" => x_max_burnin,
-        "y_max_burnin" => DEF_Y_MAX,
-        "n_gens_burnin" => n_gens_burnin,
-        "n_gens_exp" => n_gens_exp,
-        "n_gens" => n_gens)) =#
-
-    #= res = []
-    function needed_data(symb,arr,res)
-        if occursin("P", data_to_generate)
-            push!(res,Ref(arr))
-        end
-    end
-    needed_data("P",wld_pops) =#
-    res = OrderedDict{String, Any}("stats" => wld_stats)#, "fitn" => [], "pops" => [],
-    #    "AA" => [], "Aa" => [], "aa" => [],
-    #    "cAA" => [], "cAa" => [], "caa" => [], "gt" => ([],[]))
+    res = OrderedDict{String, Any}("stats" => wld_stats)
 
     for key in keys(out_fields)
-        if key=="cAA" || key=="cAa" || key=="caa"
-            res[key] = cat([dictus[key] for dictus in dicts_out]...,dims=wlddim+3)
-        elseif out_fields[key][1]
-            res[key] = cat([dictus[key] for dictus in dicts_out]...,dims=wlddim+2)
+        if out_fields[key][1]
+            if out_fields[key][2]
+                if key=="cAA" || key=="cAa" || key=="caa" || key=="gt"
+                    res[key] = cat([dictus[key] for dictus in dicts_out]...,dims=wlddim+extra_dim+1)
+                else
+                    res[key] = cat([dictus[key] for dictus in dicts_out]...,dims=wlddim+extra_dim+1)
+                end
+            else
+                if key=="gt"
+                    res[key] = cat([dictus[key][repeat([:],wlddim)...,1] for dictus in dicts_out]...,dims=wlddim+extra_dim)
+                elseif key=="mutsdel" || key=="mutsben"
+                    res[key] = cat([dictus[key][repeat([:],wlddim)...,1] for dictus in dicts_out]...,dims=wlddim+extra_dim)
+                else
+                    res[key] = cat([dictus[key][repeat([:],wlddim)...,1] for dictus in dicts_out]...,dims=wlddim+extra_dim)
+                end
+            end
         end
     end
-
-#=     res["pops"] = wld_pops
-    res["cAA"] = wld_cAA
-    res["cAa"] = wld_cAa
-    res["caa"] = wld_caa
-    res["AA"] = wld_AA
-    res["Aa"] = wld_Aa
-    res["aa"] = wld_aa =#
 
     return res
 end
@@ -1127,7 +1075,8 @@ Output: a Dict containing data after the expansion:
 """
 function rangeexp_ray(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; x_max_burnin=DEF_X_MAX_BURNIN, x_max_exp=DEF_X_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, weightfitn=true, premutate=false, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, capacity=DEF_CAPACITY)
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, capacity=DEF_CAPACITY,
+    prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, condsel=false, fixed_mate=false, SS=true, verbose=false)
 
     rangeexp(n_gens_burnin, n_gens_exp, n_re; max_burnin=(x_max_burnin,), max_exp=(x_max_exp,), maxi=(x_max_exp,), startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci, weightfitn=weightfitn, premutate=premutate, 
@@ -1143,7 +1092,8 @@ function rangeexp_linear(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_
 
     rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci, r_coords=[1],
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, multiproc=multiproc)
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, multiproc=multiproc, condsel=condsel, fixed_mate=fixed_mate,
+        SS=SS, verbose=verbose, prop_of_del_muts=prop_of_del_muts)
 end
 
 
@@ -1329,7 +1279,7 @@ end
 # Simulation functions (infinite-sites)
 # ------------------------------------------------
 
-@inline function calc_fitness(person::Array{typ_float,1})
+@inline function calc_fitness_inf(person::Array{typ_float,1})
     return prod(person)
 end
 
@@ -1481,14 +1431,14 @@ Output 4: a spatial array of demes with average deleterious mutation count in th
 
 Output 5: a spatial array of demes with average beneficial mutation count in the new generation
 """
-function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats::WorldStats, wld_fitn=NaN, wld_pops=NaN, wld_mutsdel=NaN, wld_mutsben=NaN;
-                        max_migr::Tuple=stats.max, migr_mode=DEF_MIGR_MODE, r_max_migr::Int64=0, bottleneck=NaN, refl_walls=false, r_coords::Array{Int}=[1, 2], 
+function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats, wld_fitn=NaN, wld_pops=NaN, wld_mutsdel=NaN, wld_mutsben=NaN;
+                        max_migr::Tuple=stats["max"], migr_mode=DEF_MIGR_MODE, r_max_migr::Int64=0, bottleneck=NaN, refl_walls=false, r_coords::Array{Int}=[1, 2], 
                         weightfitn::Bool=true, condsel::Bool=false, mutratelocus::Bool=false,
                         fixed_mate::Bool=false, premutate::Bool=false, SS::Bool=false, verbose=false)
     
     # Preallocate buffers for migration
-    move_buffer = zeros(Int16, stats.wlddim)
-    wlddim = stats.wlddim
+    move_buffer = zeros(Int16, stats["wlddim"])
+    wlddim = stats["wlddim"]
     #Random.seed!(1234)
 
     # Calculate offspring counts
@@ -1498,7 +1448,7 @@ function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats::World
     end
     
     # Pre-allocate reused arrays for mating
-    mate_result = ones(typ_float, stats.n_segr_regions * 2)
+    mate_result = ones(typ_float, stats["n_segr_regions"] * 2)
     
     # Process each deme
     for deme in next_gen_posits
@@ -1507,7 +1457,7 @@ function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats::World
         # Calculate fitnesses once
         fitnesses = Vector{typ_float}(undef, length(inds_at_pos))
         @inbounds for i in 1:length(inds_at_pos)
-            fitnesses[i] = calc_fitness(inds_at_pos[i])
+            fitnesses[i] = calc_fitness_inf(inds_at_pos[i])
         end
         
         next_generation_size = next_gen_pops[deme...]
@@ -1519,6 +1469,8 @@ function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats::World
                 # Select parents
                 mom_idx, dad_idx = 1, 1
                 if weightfitn
+                    println(1:length(inds_at_pos))
+                    println(fitnesses)
                     mom_idx = wsample(1:length(inds_at_pos), fitnesses)
                     dad_idx = wsample(1:length(inds_at_pos), fitnesses)
                 else
@@ -1543,35 +1495,31 @@ function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats::World
                     gamete_dad = copy(dad)
                     
                     # Apply recombination
-                    crossover_inf!(gamete_mom, stats.n_segr_regions)
-                    crossover_inf!(gamete_dad, stats.n_segr_regions)
+                    crossover_inf!(gamete_mom, stats["n_segr_regions"])
+                    crossover_inf!(gamete_dad, stats["n_segr_regions"])
                     
                     # Create zygote
                     if premutate
                         # Mutations in gametes
-                        wld_mutsdel, wld_mutsben = mutate_inf!(gamete_mom, stats.mut_rate, stats.n_segr_regions, 
-                                   stats.sel_coef, stats.prop_of_del_muts)
-                        wld_mutsdel, wld_mutsben = mutate_inf!(gamete_dad, stats.mut_rate, stats.n_segr_regions, 
-                                   stats.sel_coef, stats.prop_of_del_muts)
+                        wld_mutsdel, wld_mutsben = mutate_inf!(gamete_mom, stats["mut_rate"], stats["n_segr_regions"], 
+                                   stats["sel_coef"], stats["prop_of_del_muts"])
+                        wld_mutsdel, wld_mutsben = mutate_inf!(gamete_dad, stats["mut_rate"], stats["n_segr_regions"], 
+                                   stats["sel_coef"], stats["prop_of_del_muts"])
                         # Mating with fixed buffer
-                        mate_inf!(mate_result, gamete_mom, gamete_dad, stats.n_segr_regions, fixed_mate)
+                        mate_inf!(mate_result, gamete_mom, gamete_dad, stats["n_segr_regions"], fixed_mate)
                     else
                         # Mating first
-                        mate_inf!(mate_result, gamete_mom, gamete_dad, stats.n_segr_regions, fixed_mate)
+                        mate_inf!(mate_result, gamete_mom, gamete_dad, stats["n_segr_regions"], fixed_mate)
                         
                         # Then mutate
-                        wld_mutsdel, wld_mutsben = mutate_inf!(mate_result, stats.mut_rate, stats.n_segr_regions, 
-                                   stats.sel_coef, stats.prop_of_del_muts)
-                    end
-
-                    if verbose
-                        println("Birth iterand=",k," rand()=",rand(1))
+                        wld_mutsdel, wld_mutsben = mutate_inf!(mate_result, stats["mut_rate"], stats["n_segr_regions"], 
+                                   stats["sel_coef"], stats["prop_of_del_muts"])
                     end
 
                     if out_fields["mutsdel"][1]
                         if !out_fields["mutsdel"][2]
                             G = g
-                        elseif g == stats.n_gens
+                        elseif g == stats["n_gens"]
                             G = 1
                         end
                         if !isnan(wld_mutsdel) && !isnan(wld_mutsben)
@@ -1601,6 +1549,10 @@ function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats::World
                         wld_gt[indices...,gg+1] = []
                     end
                     push!(wld_gt[indices...,gg+1], copy(mate_result))
+
+                    if verbose
+                        println("Completed birth #",k," rand()=",rand(1))
+                    end
                 elseif !SS
                     k+=1
                 end
@@ -1613,7 +1565,7 @@ function build_next_gen_inf!(g, gg, out_fields, wld_gt::typ_gt_inf, stats::World
         end
         if out_fields["fitn"][1]
             G = out_fields["fitn"][2] ? g+1 : 1
-            wld_fitn[deme...,G]=mean(calc_fitness.(wld_gt[deme...,gg+1]))
+            wld_fitn[deme...,G]=mean(calc_fitness_inf.(wld_gt[deme...,gg+1]))
         end
     end
 
@@ -1673,26 +1625,20 @@ function create_empty_world_inf(maxi=(DEF_X_MAX, DEF_Y_MAX); min=(1, 1), name="s
     #println("Created ",wld_gt)
     #println(size(wld_gt))
 
-    wld_stats = WorldStats(
-        name,
-        maxi,
-        capacity,
-        prolif_rate,
-        n_segr_regions,
-        regions,
-        mut_rate,
-        migr_rate,
-        migr_mode,
-        sel_coef,
-        prop_of_del_muts,
-        length(maxi),
-        (0,),
-        (0,),
-        0,
-        0,
-        0,
-        Vector{UnitRange{Int64}}(undef,0),
-        0
+    wld_stats = OrderedDict(
+        "name" => name,
+        "max" => maxi,
+        "capacity" => capacity,
+        "prolif_rate" => prolif_rate,
+        "regions" => regions,
+        "n_segr_regions" => n_segr_regions,
+        "mut_rate" => mut_rate,
+        "migr_rate" => migr_rate,
+        "migr_mode" => migr_mode,
+        "sel_coef" => sel_coef,
+        "prop_of_del_muts" => prop_of_del_muts,
+        "wlddim" => length(maxi)
+        #"rangeexps" => []
     )
 
     return wld_gt, wld_stats
@@ -1715,10 +1661,10 @@ Fills random demes within given monosome arrays with infinite-sites individuals.
 function fill_random_demes_inf(wld_gt, wld_stats, fill_iter, n_demes_to_fill=DEF_N_DEMES_STARTFILL; fill_range=NaN, redims=NaN, verbose=false)
     if !isnothing(fill_iter)
         possible_init_coords = collect(fill_iter)
-        #wld_stats.startfill = collect(fill_iter)
+        #wld_stats["startfill"] = collect(fill_iter)
     else
         possible_init_coords = [collect(x) for x in Iterators.product(fill_range...)]
-        wld_stats.startfill = copy(fill_range)
+        wld_stats["startfill"] = copy(fill_range)
     end
     if length(possible_init_coords)<n_demes_to_fill
         println("n_demes_to_fill is more than existing demes!")
@@ -1728,8 +1674,8 @@ function fill_random_demes_inf(wld_gt, wld_stats, fill_iter, n_demes_to_fill=DEF
         println("Filling ",wld_gt,".")
     end
     for coord in init_coords
-        for _ in 1:wld_stats.capacity
-            push!(wld_gt[coord...,redims...], ones(typ_float, wld_stats.n_segr_regions * 2))
+        for _ in 1:wld_stats["capacity"]
+            push!(wld_gt[coord...,redims...], ones(typ_float, wld_stats["n_segr_regions"] * 2))
 
             #println(size(wld_gt))
         end
@@ -1738,7 +1684,7 @@ function fill_random_demes_inf(wld_gt, wld_stats, fill_iter, n_demes_to_fill=DEF
         println("Filled ",wld_gt,".")
     end
     
-    wld_stats.n_demes_startfill = n_demes_to_fill
+    wld_stats["n_demes_startfill"] = n_demes_to_fill
 end
 
 function dist_re(fnc=rangeexp_ray_inf;timed=false)
@@ -1832,13 +1778,13 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
     println("max_burnin ",max_burnin)
     println("startfill_range ",startfill_range)
     println("startfill_iter ",startfill_iter)
-    wlddim = wld_stats.wlddim
-    wld_stats.max_burnin = max_burnin
-    wld_stats.max_exp = max_exp
-    wld_stats.n_gens_burnin = n_gens_burnin
-    wld_stats.n_gens_exp = n_gens_exp
+    wlddim = wld_stats["wlddim"]
+    wld_stats["max_burnin"] = max_burnin
+    wld_stats["max_exp"] = max_exp
+    wld_stats["n_gens_burnin"] = n_gens_burnin
+    wld_stats["n_gens_exp"] = n_gens_exp
     n_gens = n_gens_burnin + n_gens_exp
-    wld_stats.n_gens = n_gens
+    wld_stats["n_gens"] = n_gens
 
     function check_what_output(letter)
         return (occursin(letter, data_to_generate),occursin(letter*"l", data_to_generate))
@@ -1848,7 +1794,7 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
 
     function tsk_re(_proc_no=NaN)
         cond_n_gens = out_fields["gt"][1] && out_fields["gt"][2] ? n_gens+1 : 2
-        rewld_gt_local = (typ_gt_inf)(undef, wld_stats.max..., cond_n_gens)
+        rewld_gt_local = (typ_gt_inf)(undef, wld_stats["max"]..., cond_n_gens)
 
         rewld_gt_local[repeat([:],wlddim)...,1] = deepcopy(wld_gt)
         for og in 2:cond_n_gens
@@ -1860,11 +1806,11 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
         
         if out_fields["fitn"][1]
             cond_n_gens = out_fields["fitn"][2] ? n_gens+1 : 1
-            rewld_fitn_local = Array{typ_float}(undef, wld_stats.max..., cond_n_gens)
+            rewld_fitn_local = Array{typ_float}(undef, wld_stats["max"]..., cond_n_gens)
             fill!(rewld_fitn_local,NaN)
             if out_fields["fitn"][2]
                 for deme in CartesianIndices(maxi)
-                    rewld_fitn_local[deme,1] = mean(calc_fitness.(rewld_gt_local[deme,1]))
+                    rewld_fitn_local[deme,1] = mean(calc_fitness_inf.(rewld_gt_local[deme,1]))
                 end
             end
         else
@@ -1872,7 +1818,7 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
         end
         if out_fields["pops"][1]
             cond_n_gens = out_fields["pops"][2] ? n_gens+1 : 1
-            rewld_pops_local = Array{typ_float}(undef, wld_stats.max..., cond_n_gens)
+            rewld_pops_local = Array{typ_float}(undef, wld_stats["max"]..., cond_n_gens)
             fill!(rewld_pops_local,NaN)
             if out_fields["pops"][2]
                 for deme in CartesianIndices(maxi)
@@ -1884,8 +1830,8 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
         end
         if out_fields["mutsdel"][1]
             cond_n_gens = out_fields["mutsdel"][2] ? n_gens+1 : 1
-            rewld_mutsdel_local = Array{typ_float}(undef, wld_stats.max..., wld_stats.n_loci, cond_n_gens)
-            rewld_mutsben_local = Array{typ_float}(undef, wld_stats.max..., wld_stats.n_loci, cond_n_gens)
+            rewld_mutsdel_local = Array{typ_float}(undef, wld_stats["max"]..., wld_stats["n_loci"], cond_n_gens)
+            rewld_mutsben_local = Array{typ_float}(undef, wld_stats["max"]..., wld_stats["n_loci"], cond_n_gens)
             fill!(rewld_mutsdel_local,NaN)
             fill!(rewld_mutsben_local,NaN)
         else
@@ -1938,7 +1884,8 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
             dicts_out = ThreadsX.map(p->tsk_re(), 1:n_re)
         end
     else
-        dicts_out = [tsk_re()]
+        dicts_out,t = @timed [tsk_re()]
+        println("Simulated in ",t," s.")
     end
 
     res = OrderedDict{String, Any}("stats" => wld_stats)

@@ -62,7 +62,10 @@ Shows an animated heatmap of `data` from `gen_start` to `gen_end`.
 """
 function re_heatmap(data::Array, gen_start=1, gen_end=DEF_N_GENS_BURNIN + DEF_N_GENS_EXP; n_gens_sub=0, slow_factor=1, log_base=-1, hex=false, clim=:default, kwargs...)
     dims = length(size(data))
-
+    println(dims)
+    if size(data)[end] == 1
+        dims -= 1
+    end
     # Override default clim, since it's not fixed in animations
     if clim == :default
         no_nans = filter(!isnan, data)
@@ -109,6 +112,7 @@ function re_heatmap(data::Array, gen_start=1, gen_end=DEF_N_GENS_BURNIN + DEF_N_
     else
 
         @gif for i in gen_start:(gen_end*slow_factor)
+
             gen_no = trunc(Int, i / slow_factor)
 
             if all(isnan, li(data, gen_no))
@@ -156,9 +160,9 @@ Shows an animated heatmap of `dataname` in `re` from `gen_start` to `gen_end`.
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap(re::OrderedDict, dataname::String, gen_start=1, gen_end=size(re[dataname],ndims(test["fitn"])-1); re_index::Int = 1, n_gens_sub=re["stats"]["n_gens_burnin"], slow_factor=1, log_base=-1, defc=false, clim=:default, kwargs...)
+function re_heatmap(re::OrderedDict, dataname::String, gen_start=1, gen_end=size(re[dataname],ndims(re[dataname])-1); re_index::Int = 1, n_gens_sub=re["stats"]["n_gens_burnin"], slow_factor=1, log_base=-1, defc=false, clim=:default, kwargs...)
     if !isa(re[dataname], Array)
-        println("This data was not generated.")
+        println("This data does not exist / was not selected for generation.")
     else
         wlddim = re["stats"]["wlddim"]
 
