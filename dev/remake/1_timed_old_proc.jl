@@ -4,11 +4,11 @@
 # ------------------------------------------------
 
 using StatsBase, Distributions, Random
-#Random.seed!(1234)
+Random.seed!(1234)
 # Input parameters
 # ------------------------------------------------
 const BURN_IN_GEN_N = 100
-const TOTAL_GEN_N = 400
+const TOTAL_GEN_N = 500
 
 # Max coordinates of the population bounding space
 const X_MAX_BURN_IN = 5
