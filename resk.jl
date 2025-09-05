@@ -1,7 +1,7 @@
 using StatsBase, Distributions, Distributed, Random, Serialization, Dates, DataStructures, ThreadsX #SpecialFunctions
 include("defaults.jl")
 
-const RESK_VERSION = v"0.3.6"
+const RESK_VERSION = v"0.3.7"
 
 # Constants
 # ------------------------------------------------
@@ -298,12 +298,12 @@ function calc_fitness(deme_ms1, deme_ms2, domin_coef, loci, sel_loci=[])
         for j in 1:n_loci
             if deme_ms1[i][j] == true && deme_ms2[i][j] == true
                 if j in sel_loci
-                    new_fitness *= 1 - loci[j]
+                    new_fitness *= 1 + loci[j]
                 end
 
             elseif deme_ms1[i][j] == true || deme_ms2[i][j] == true
                 if j in sel_loci
-                    new_fitness *= 1 - domin_coef * loci[j]
+                    new_fitness *= 1 + domin_coef * loci[j]
                 end
             end
         end
@@ -361,13 +361,13 @@ function calc_fitness_and_states(deme_ms1, deme_ms2, domin_coef, loci, sel_loci=
         for j in 1:n_loci
             if deme_ms1[i][j] == true && deme_ms2[i][j] == true
                 if j in sel_loci
-                    new_fitness *= 1 - loci[j]
+                    new_fitness *= 1 + loci[j]
                 end
                 cAA[j] += 1
 
             elseif deme_ms1[i][j] == true || deme_ms2[i][j] == true
                 if j in sel_loci
-                    new_fitness *= 1 - domin_coef * loci[j]
+                    new_fitness *= 1 + domin_coef * loci[j]
                 end
                 cAa[j] += 1
             else
@@ -772,6 +772,12 @@ function fill_random_demes(wld_gt1, wld_gt2, wld_stats, fill_iter, n_demes_to_fi
     init_coords = sample(possible_init_coords, n_demes_to_fill; replace=false)
     wld_stats["sel_loci"] = randperm(wld_stats["n_loci"])[1:wld_stats["n_sel_loci"]]
 
+    if haskey(wld_stats,"prop_of_del_muts")
+        n_ids = Int(wld_stats["prop_of_del_muts"]*wld_stats["n_loci"])
+        ids = randperm(wld_stats["n_loci"])[1:n_ids]
+        wld_stats["loci"][ids] .*= -1
+    end
+
     if verbose
         println("Filling ",first(wld_gt1,5)," & ",first(wld_gt2,5)," .")
     end
@@ -855,8 +861,9 @@ Output: a Dict containing data after the expansion:
 - **fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
 function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), maxi=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
-    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, r_coords=[1, 2], capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, verbose=false,
-    mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci), mutratelocus=false, weightfitn=true, condsel=false, fixed_mate=false, startfill_iter=nothing,
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, r_coords=[1, 2], capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE,
+    prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, verbose=false, condsel=false, fixed_mate=false, startfill_iter=nothing,
+    mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci), mutratelocus=false, weightfitn=true, 
     startfill_range=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, SS=true)
     
     if isnan(wld_gt1)
@@ -988,7 +995,7 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
         "cAA" => rewld_cAA_local, "cAa" => rewld_cAa_local, "caa" => rewld_caa_local)
     end
 
-    extra_dim = 1
+    extra_dim = 0
 
     if n_re > 1
         extra_dim += 1
@@ -1093,7 +1100,8 @@ function rangeexp_ray(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
 
     rangeexp(n_gens_burnin, n_gens_exp, n_re; max_burnin=(x_max_burnin,), max_exp=(x_max_exp,), maxi=(x_max_exp,), startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci, weightfitn=weightfitn, 
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, multiproc=multiproc)
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, multiproc=multiproc, condsel=condsel, fixed_mate=fixed_mate,
+        SS=SS, verbose=verbose, prop_of_del_muts=prop_of_del_muts)
 end
 
 const rangeexp_1d = rangeexp_ray
