@@ -52,7 +52,7 @@ Shows an animated heatmap of `data` from `gen_start` to `gen_end`.
 
 `n_gens_sub`: number of generations to subtract; e.g. set this as the number of burn-in gen-s if you wish to display the burn-in gen-s in negative numbers
 
-`slow_factor`: number of animation frames per generation
+`animspeed`: number of animation frames per generation
 
 `log_base`: if not **-1**, color shows log values with this as base
 
@@ -60,7 +60,7 @@ Shows an animated heatmap of `data` from `gen_start` to `gen_end`.
 
 `kwargs...`: any other Plots.jl parameters
 """
-function re_heatmap(data::Array, gen_start=1, gen_end=DEF_N_GENS_BURNIN + DEF_N_GENS_EXP; n_gens_sub=0, slow_factor=1, log_base=-1, hex=false, clim=:default, kwargs...)
+function re_heatmap(data::Array, gen_start=1, gen_end=last(size(data)); n_gens_sub=0, animspeed=1, log_base=-1, hex=false, clim=:default, kwargs...)
     dims = length(size(data))
     println(dims)
     if size(data)[end] == 1
@@ -81,7 +81,7 @@ function re_heatmap(data::Array, gen_start=1, gen_end=DEF_N_GENS_BURNIN + DEF_N_
             ymax = size(data)[2]
 
             function frame(scene, framenumber)
-                gen_no = trunc(Int, framenumber / slow_factor) + 1
+                gen_no = trunc(Int, framenumber / animspeed) + 1
                 background("white")
                 origin(0,0)
                 tickline(Luxor.Point(104, 61), Luxor.Point(104+shortd*(xmax-1), 61),major=xmax-2,startnumber=1, finishnumber=xmax,  major_tick_function = hextickfun) # x-axis
@@ -107,16 +107,17 @@ function re_heatmap(data::Array, gen_start=1, gen_end=DEF_N_GENS_BURNIN + DEF_N_
             end
             
             demo = Movie(trunc(Int,122+shortd*xmax),trunc(Int,90+shortd*ymax), "test.gif", 1:gen_end)            
-            Luxor.animate(demo, Luxor.Scene(demo, frame, gen_start:(gen_end*slow_factor-1)); creategif=true)
+            Luxor.animate(demo, Luxor.Scene(demo, frame, gen_start:(gen_end*animspeed-1)); creategif=true)
         end
     else
 
-        @gif for i in gen_start:(gen_end*slow_factor)
 
-            gen_no = trunc(Int, i / slow_factor)
+
+        @gif for gen_no in gen_start:round(Int,animspeed):gen_end
 
             if all(isnan, li(data, gen_no))
                 println("No values found in any deme.")
+                continue
             end
 
             if log_base > 0 && log_base == 1
@@ -152,7 +153,7 @@ Shows an animated heatmap of `dataname` in `re` from `gen_start` to `gen_end`.
 
 `n_gens_sub`: number of generations to subtract; e.g. set this as the number of burn-in gen-s if you wish to display the burn-in gen-s in negative numbers
 
-`slow_factor`: number of animation frames per generation
+`animspeed`: number of animation frames per generation
 
 `log_base`: if not **-1**, color shows log values with this as base
 
@@ -160,7 +161,7 @@ Shows an animated heatmap of `dataname` in `re` from `gen_start` to `gen_end`.
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatmap(re::OrderedDict, dataname::String, gen_start=1, gen_end=size(re[dataname],ndims(re[dataname])-1); re_index::Int = 1, n_gens_sub=re["stats"]["n_gens_burnin"], slow_factor=1, log_base=-1, defc=false, clim=:default, kwargs...)
+function re_heatmap(re::OrderedDict, dataname::String, gen_start=1, gen_end=re["stats"]["n_gens"]; re_index::Int = 1, n_gens_sub=re["stats"]["n_gens_burnin"], animspeed=1, log_base=-1, defc=false, clim=:default, kwargs...)
     if !isa(re[dataname], Array)
         println("This data does not exist / was not selected for generation.")
     else
@@ -180,7 +181,7 @@ function re_heatmap(re::OrderedDict, dataname::String, gen_start=1, gen_end=size
             end
         end
 
-        re_heatmap(re[dataname][repeat([:],wlddim)...,:,re_index], gen_start, gen_end; n_gens_sub=n_gens_sub, slow_factor=slow_factor, log_base=log_base, clim=clim, title=dataname*" #$re_index", 
+        re_heatmap(re[dataname][repeat([:],wlddim)...,:,re_index], gen_start, gen_end; n_gens_sub=n_gens_sub, animspeed=animspeed, log_base=log_base, clim=clim, title=dataname*" #$re_index", 
         hex = re["stats"]["migr_mode"]=="hex" ? true : false,
         kwargs...)
     end
@@ -280,7 +281,7 @@ Shows an animated heatstack (3d heatmap) of `data`.
 
 `n_gens_burnin`: number of burn-in next_generation_size
 """
-function re_heatstack(data::Array, gen_start=1, gen_end=size(data,4); clim=NaN, x_range=1:size(data,1), z_range=1:size(data,3), title="", n_gens_burnin=0)
+function re_heatstack(data::Array, gen_start=1, gen_end=last(size(data)); clim=NaN, x_range=1:size(data,1), z_range=1:size(data,3), title="", n_gens_burnin=0)
     scene = Figure()
 
     if isnan(clim)

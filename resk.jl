@@ -524,7 +524,7 @@ Output 9: a spatial array of demes with average neutral Aa mutation count in the
 Output 10: a spatial array of demes with average neutral aa mutation count in the new generation
 """
 function build_next_gen!(g, gg, out_fields, wld_gt1::typ_gt, wld_gt2::typ_gt, stats, wld_fitn=NaN, wld_pops=NaN, wld_cAA=NaN, wld_cAa=NaN, wld_caa=NaN, wld_AA=NaN, wld_Aa=NaN, wld_aa=NaN;
-    max_migr::Tuple=stats["max"], migr_mode=DEF_MIGR_MODE, r_max_migr::Int64=0, bottleneck=NaN, refl_walls=false, r_coords::Array{Int}=[1, 2], 
+    max_migr::Tuple=stats["max"], migr_mode=DEF_MIGR_MODE, r_max_migr::Int64=0, bottleneck=NaN, refl_walls=false, r_coords::Array{Int}=[1, 2], relcnt::Bool=false,
     weightfitn::Bool=true, condsel::Bool=false, mutratelocus::Bool=false,
     fixed_mate::Bool=false, SS::Bool=false, verbose=false)
 
@@ -628,7 +628,7 @@ function build_next_gen!(g, gg, out_fields, wld_gt1::typ_gt, wld_gt2::typ_gt, st
             G = out_fields["pops"][2] ? g+1 : 1
             wld_pops[deme...,G]=length(wld_gt1[deme...,gg+1])
         end
-        if out_fields["fitn"][1] || out_fields["cAA"][1] || out_fields["cAa"][1] || out_fields["caa"][1] || out_fields["AA"][1] || out_fields["Aa"][1] || out_fields["aa"][1]
+        if out_fields["fitn"][1] || out_fields["cAA"][1] || out_fields["AA"][1]
             fitn,cAA,cAa,caa = calc_fitness_and_states(wld_gt1[deme...,gg+1],wld_gt2[deme...,gg+1],stats)
             if out_fields["fitn"][1]
                 G = out_fields["fitn"][2] ? g+1 : 1
@@ -636,21 +636,17 @@ function build_next_gen!(g, gg, out_fields, wld_gt1::typ_gt, wld_gt2::typ_gt, st
             end
             if out_fields["cAA"][1]
                 G = out_fields["cAA"][2] ? g+1 : 1
-                wld_cAA[deme...,G]=cAA
+                for ww in 1:stats["n_loci"]
+                    wld_cAA[deme...,ww,G]=cAA[ww]
+                    wld_cAa[deme...,ww,G]=cAa[ww]
+                    wld_caa[deme...,ww,G]=caa[ww]
+                end
             end
-            if out_fields["cAa"][1]
-                G = out_fields["cAa"][2] ? g+1 : 1
-                wld_cAa[deme...,G]=cAa
-            end
-            if out_fields["caa"][1]
-                G = out_fields["caa"][2] ? g+1 : 1
-                wld_caa[deme...,G]=caa
-            end
-            if out_fields["AA"][1] # Do we need separate outputs? Thatll be verbose for the user to type as a data_to_output
+            if out_fields["AA"][1]
                 G = out_fields["AA"][2] ? g+1 : 1
-                wld_AA[deme...,G] = relcnt ? sum(cAA)/wld_stats["n_loci"]/lenn : sum(cAA)/wld_stats["n_loci"]
-                #wld_Aa[deme...,G] = relcnt ? sum(cAa)/wld_stats["n_loci"]/lenn : sum(cAa)/wld_stats["n_loci"]
-                #wld_aa[deme...,G] = relcnt ? sum(caa)/wld_stats["n_loci"]/lenn : sum(caa)/wld_stats["n_loci"]
+                wld_AA[deme...,G] = relcnt ? sum(cAA)/stats["n_loci"]/lenn : sum(cAA)/stats["n_loci"]
+                wld_Aa[deme...,G] = relcnt ? sum(cAa)/stats["n_loci"]/lenn : sum(cAa)/stats["n_loci"]
+                wld_aa[deme...,G] = relcnt ? sum(caa)/stats["n_loci"]/lenn : sum(caa)/stats["n_loci"]
             end
         end
     end
@@ -862,7 +858,7 @@ Output: a Dict containing data after the expansion:
 """
 function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; max_burnin=(DEF_X_MAX_BURNIN, DEF_Y_MAX), max_exp=(DEF_X_MAX_EXP, DEF_Y_MAX), maxi=(DEF_X_MAX, DEF_Y_MAX), migr_mode=DEF_MIGR_MODE,
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, r_coords=[1, 2], capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE,
-    prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, verbose=false, condsel=false, fixed_mate=false, startfill_iter=nothing,
+    prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, verbose=false, condsel=false, fixed_mate=false, startfill_iter=nothing, relcnt=false,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci), mutratelocus=false, weightfitn=true, 
     startfill_range=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, SS=true)
     
@@ -979,7 +975,7 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
             end
 
             build_next_gen!(g, gg, out_fields, rewld_gt1_local, rewld_gt2_local, wld_stats, rewld_fitn_local, rewld_pops_local, rewld_cAA_local, rewld_cAa_local, rewld_caa_local, rewld_AA_local, rewld_Aa_local, rewld_aa_local;
-            max_migr=max_migr, migr_mode=migr_mode, r_max_migr=r_max_migr, bottleneck=bottleneck, r_coords=r_coords,
+            max_migr=max_migr, migr_mode=migr_mode, r_max_migr=r_max_migr, bottleneck=bottleneck, r_coords=r_coords, relcnt=relcnt,
             mutratelocus=mutratelocus, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, 
             SS=SS, verbose=verbose)
 
@@ -1004,6 +1000,7 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
             println("Running $n_re replicates on processes $npcs.")
             dicts_out,t = @timed pmap(tsk_re, 1:n_re)
             println("Simulated in ",t," s.")
+            wld_stats["simtime"]=t
         else
             println("Using all threads.")
             dicts_out = ThreadsX.map(p->tsk_re(), 1:n_re)
@@ -1011,6 +1008,7 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
     else
         dicts_out,t = @timed [tsk_re()]
         println("Simulated in ",t," s.")
+        wld_stats["simtime"]=t
     end
 
     res = OrderedDict{String, Any}("stats" => wld_stats)
@@ -1180,7 +1178,7 @@ Output: a Dict containing data after the expansion:
 - **fitn**, **pops**, **AAsel**, **Aasel**, **aasel**, **AAneu**, **Aaneu**, **aaneu** - data array with dimensions (space+time) that are generated if they were selected in `data_to_generate`
 """
 function rangeexp_strip(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; x_max_burnin=DEF_X_MAX_BURNIN, x_max_exp=DEF_X_MAX_EXP, y_max=DEF_Y_MAX, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, 
-    prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, SS=true, verbose=false,
+    prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, SS=true, verbose=false, relcnt=false,
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=("midhole at x=", x_max_burnin * 2), prolif_rate=DEF_PROLIF_RATE,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, capacity=DEF_CAPACITY, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
     wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, max_burnin=(x_max_burnin, y_max), max_exp=(x_max_exp, y_max), maxi=(x_max_exp, y_max), multiproc=true)
@@ -1188,7 +1186,7 @@ function rangeexp_strip(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_E
     rangeexp(n_gens_burnin, n_gens_exp, n_re; max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, startfill_range=startfill_range, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, capacity=capacity, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, multiproc=multiproc, SS=SS, verbose=verbose,
-        weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, prop_of_del_muts=prop_of_del_muts)
+        weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, prop_of_del_muts=prop_of_del_muts, relcnt=relcnt)
 end
 
 """
@@ -1265,10 +1263,12 @@ function rangeexp_disk(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EX
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck)
 end
 
-function rangeexp_cylinder(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
+function rangeexp_cylinder(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max=DEF_R_MAX_BURNIN, r_max_burnin=r_max, r_max_exp=r_max, migr_mode=DEF_MIGR_MODE, 
+    startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
     z_max_burnin=DEF_X_MAX_BURNIN, z_max_exp=DEF_X_MAX_EXP, max_burnin=(NaN, NaN, z_max_burnin), max_exp=(NaN, NaN, z_max_exp), maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp), capacity=DEF_CAPACITY,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    data_to_generate=DEF_DATA_TO_GENERATE, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, multiproc=true, SS=true, verbose=false, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false)
+    data_to_generate=DEF_DATA_TO_GENERATE, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, multiproc=true, 
+    SS=true, verbose=false, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false)
 
     if !isa(startfill_range, Array)
         ran = ins_sq(r_max_burnin, maxi[1])
@@ -1705,18 +1705,6 @@ function fill_random_demes_inf(wld_gt, wld_stats, fill_iter, n_demes_to_fill=DEF
     wld_stats["n_demes_startfill"] = n_demes_to_fill
 end
 
-function dist_re(fnc=rangeexp_ray_inf;timed=false)
-    wo = workers()
-    lenwo = length(wo)
-    println("Running $n_re replicates on $lenwo processes: $wo.")
-    if timed
-        A,t = @timed pmap(x->fnc(), 1:n_re)
-        println("Simulated in ",t," sec.")
-        return A
-    else
-        return pmap(x->rangeexp_ray_inf(), 1:n_re)
-    end
-end
 
 """
 
@@ -1897,6 +1885,7 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
             println("Running $n_re replicates on processes $npcs.")
             dicts_out,t = @timed pmap(tsk_re, 1:n_re)
             println("Simulated in ",t," s.")
+            wld_stats["simtime"]=t
         else
             println("Using all threads.")
             dicts_out = ThreadsX.map(p->tsk_re(), 1:n_re)
@@ -1904,6 +1893,7 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
     else
         dicts_out,t = @timed [tsk_re()]
         println("Simulated in ",t," s.")
+        wld_stats["simtime"]=t
     end
 
     res = OrderedDict{String, Any}("stats" => wld_stats)
@@ -2095,7 +2085,7 @@ function rangeexp_disk_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GEN
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt=wld_gt, wld_stats=wld_stats, name=name, bottleneck=bottleneck, SS=SS, verbose=verbose)
 end
 
-function rangeexp_cylinder_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
+function rangeexp_cylinder_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max=DEF_R_MAX_BURNIN, r_max_burnin=r_max, r_max_exp=r_max, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
     z_max_burnin=DEF_X_MAX_BURNIN, z_max_exp=DEF_X_MAX_EXP, max_burnin=(NaN, NaN, z_max_burnin), max_exp=(NaN, NaN, z_max_exp), maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp), capacity=DEF_CAPACITY,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, premutate=false, n_segr_regions=DEF_N_SEGR_REGIONS,
     data_to_generate=DEF_DATA_TO_GENERATE, wld_gt=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, SS=true, verbose=false)

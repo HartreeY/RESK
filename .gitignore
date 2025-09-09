@@ -8,6 +8,7 @@
 study/data/
 dev/data/
 data/
+dev/paperdata/
 scp_from_hpc.ps1
 
 # Jupyter Notebook
