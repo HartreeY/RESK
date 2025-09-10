@@ -1,4 +1,4 @@
-using StatsBase, Distributions, Distributed, Random, Serialization, Dates, DataStructures, ThreadsX #SpecialFunctions
+using StatsBase, Distributions, Distributed, Random, Serialization, Dates, DataStructures#, ThreadsX #SpecialFunctions
 include("defaults.jl")
 
 const RESK_VERSION = v"0.3.7"
