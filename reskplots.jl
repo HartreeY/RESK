@@ -60,7 +60,7 @@ Shows an animated heatmap of `data` from `gen_start` to `gen_end`.
 
 `kwargs...`: any other Plots.jl parameters
 """
-function re_heatmap(data::Array, gen_start=1, gen_end=last(size(data)); n_gens_sub=0, animspeed=1, log_base=-1, hex=false, clim=:default, kwargs...)
+function re_heatmap(data::Array, gen_start=1, gen_end=last(size(data)); fileout::Union{String,Nothing}=nothing, n_gens_sub=0, animspeed=1, log_base=-1, hex=false, clim=:default, kwargs...)
     dims = length(size(data))
     println(dims)
     if size(data)[end] == 1
@@ -113,7 +113,7 @@ function re_heatmap(data::Array, gen_start=1, gen_end=last(size(data)); n_gens_s
 
 
 
-        @gif for gen_no in gen_start:round(Int,animspeed):gen_end
+        an = @animate for gen_no in gen_start:round(Int,animspeed):gen_end
 
             if all(isnan, li(data, gen_no))
                 println("No values found in any deme.")
@@ -132,6 +132,12 @@ function re_heatmap(data::Array, gen_start=1, gen_end=last(size(data)); n_gens_s
                 Plots.heatmap(obj, ylabel="Generation $(gen_no-n_gens_sub)", clim=clim; kwargs...)
             end
             
+        end
+        if isnothing(fileout)
+            gif(an, fps=20)
+        else
+            # write the gif to the given file
+            gif(an, fileout, fps=20) |> _ -> nothing
         end
     end
 end
@@ -281,10 +287,10 @@ Shows an animated heatstack (3d heatmap) of `data`.
 
 `n_gens_burnin`: number of burn-in next_generation_size
 """
-function re_heatstack(data::Array, gen_start=1, gen_end=last(size(data)); clim=NaN, x_range=1:size(data,1), z_range=1:size(data,3), title="", n_gens_burnin=0)
+function re_heatstack(data::Array, gen_start=1, gen_end=last(size(data)); clim::Union{Tuple,Nothing}=nothing, x_range=1:size(data,1), z_range=1:size(data,3), title="", n_gens_burnin=0)
     scene = Figure()
 
-    if isnan(clim)
+    if isnothing(clim)
         no_nans = filter(!isnan, data)
         clim = minimum(no_nans)==maximum(no_nans) ? (0,1) : (minimum(no_nans), maximum(no_nans))
         println(clim)

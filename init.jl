@@ -2,6 +2,7 @@ import Pkg
 Pkg.add("StatsBase")
 Pkg.add("Distributions")
 Pkg.add("Distributed")
+Pkg.add("DataStructures")
 Pkg.add("Random")
 Pkg.add("Serialization")
 Pkg.add("Plots")
