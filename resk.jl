@@ -1,7 +1,7 @@
 using StatsBase, Distributions, Distributed, Random, Serialization, Dates, DataStructures#, ThreadsX #SpecialFunctions
 include("defaults.jl")
 
-const RESK_VERSION = v"0.5.0"
+const RESK_VERSION = v"0.5.1"
 
 # Constants
 # ------------------------------------------------
@@ -1876,7 +1876,7 @@ function rangeexp_inf(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP
         "mutsdel" => rewld_mutsdel_local, "mutsben" => rewld_mutsben_local)
     end
 
-    extra_dim = 1
+    extra_dim = 0
 
     if n_re > 1
         extra_dim += 1
@@ -2134,12 +2134,9 @@ Finds the average values of `data` over the whole population for each generation
 
 Output: array of averages of `data` for every generation
 """
-function average_all(data::Array, n_gens::Int)
-    res = Array{typ_float}(undef, 0)
-    for j in 1:n_gens
-        push!(res, mean(filter(!isnan, data[repeat([:],length(size(data))-2)...,j,:])))
-    end
-    return res
+function average_all(data::Array)
+    n = length(size(data))
+    return dropdims(mean(data,dims=n); dims=n)
 end
 
 """
@@ -2155,7 +2152,7 @@ Finds the average values of `dataname` in `re` over the whole population for eac
 
 Output: array of averages of `re[dataname]` for every generation
 """
-function average_all(re::Dict, dataname::String)
+function average_all(re::OrderedDict, dataname::String)
     average_all(re[dataname], re["stats"]["n_gens"])
 end
 

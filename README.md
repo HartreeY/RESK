@@ -1,6 +1,6 @@
 # Range Expansions Simulation Kit (RESK)
-A set of programs in Julia designed to efficiently simulate range expansions and study their population dynamics.
-This set of programs has been used in the study "The evolution of fitness during range expansions in multiple dimensions". You can find the preprint at https://www.biorxiv.org/content/10.1101/2023.12.29.573608v2.
+A Julia library designed to efficiently simulate range expansions and analyse, as well as visualise their population dynamics.
+This library has been presented in the study "RESK: An easy-to-use library for performing population genetic simulations". You can find the preprint at https://www.biorxiv.org/zzzz.
 
 ## How to use
 ### Prerequisites
@@ -29,38 +29,36 @@ To simulate a range expansion once, use `rangeexp` or methods that start with `r
 Running this with default options, a world (= habitat) will be created, seeded with individuals, and an expansion will be run on it.
 
 The `rangeexp` functions output a fixed dictionary that includes metadata (**stats**) and expansion data. The types of expansion data within it are determined by the *data_to_generate* argument. It can take on the following values:
+- **G** - **gt1**, **gt2** (genotype arrays)
 - **F** - **fitn** (deme-average fitness)
 - **P** - **pops** (deme populations)
-- **S** - **AAsel**, **Aasel** and **aasel** (deme-average number of homo- [**AA**, **aa**] and heterozygous [**Aa**] selected loci)
-- **N** - **AAneu**, **Aaneu** and **aaneu** (deme-average number of homo- and heterozygous neutral loci)
+- **C** - **cAA**, **cAa** and **caa** (counts of homo- [**cAA**, **caa**] and heterozygous [**cAa**] loci in a deme)
+- **A** - **AA**, **Aa** and **aa** (counts of homo- [**AA**, **aa**] and heterozygous [**Aa**] loci in a deme, averaged over all loci)
 The above can be combined and should be passed in a string. For example,
 ```
-test = rangeexp_strip(15, 30; data_to_generate="SF", y_max=5)
+test = rangeexp_strip(15, 30; data_to_generate="ClFl", y_max=5)
 ```
-will output
+will output:
 ```
-Dict{String, Any} with 9 entries:
-  "AAsel" => Float32[0.0 0.0 … 0.0 0.0; 0.0 0.0 … 0.0 0.0; … ; 0.0 0.0 … 0.0 0.…
-  "Aasel" => Float32[0.0 0.0 … 0.0 0.0; 0.0 0.0 … 0.0 0.0; … ; 0.0 0.0 … 0.0 0.…
-  "aasel" => Float32[0.0 0.0 … 0.0 0.0; 25.0 25.0 … 0.0 25.0; … ; 0.0 0.0 … 0.0…
-  "pops"  => Float32[]
-  "fitn" => Float32[-1.0 -1.0 … -1.0 -1.0; 0.05 0.05 … -1.0 0.05; … ; -1.0 -1.…
-  "aaneu" => Float32[]
-  "Aaneu" => Float32[]
-  "AAneu" => Float32[]
-  "stats" => Dict{String, Any}("y_max_burnin"=>10, "x_max"=>100, "migr_mode"=>[…
+OrderedDict{String, Any} with 5 entries:
+  "stats" => OrderedDict{String, Any}("name"=>"2025-09-16_21-51-15", "max"=>(10…
+  "fitn"  => Float32[NaN NaN … 1.0 NaN; NaN NaN … NaN NaN; … ; NaN NaN … NaN Na…
+  "cAA"   => Float32[NaN NaN … NaN NaN; NaN NaN … NaN NaN; … ; NaN NaN … NaN Na…
+  "cAa"   => Float32[NaN NaN … NaN NaN; NaN NaN … NaN NaN; … ; NaN NaN … NaN Na…
+  "caa"   => Float32[NaN NaN … NaN NaN; NaN NaN … NaN NaN; … ; NaN NaN … NaN Na…
 ```
-
-These expansion data can be plotted and worked with. To plot expansion data, include the *reskplots.jl* file and use the unique plotting functions that start with *re_*. For example,
+Here, **l** means **long**, and needs to be written after every output data type in *data_to_generate* if the user wants to receive the corresponding data for all generations. (Without **l**, the output will be limited to the last generation.)
+These expansion data sets can be plotted and worked with. To plot expansion data, include the *reskplots.jl* file and use the unique plotting functions that start with *re_*. For example,
 ```
-re_heatmap_AAsel(test; log_factor=1.02)
+re_heatmap(test, "AA"; log_factor=1.02)
 ```
-will output the average number of selected homozygous mutant loci in a deme:
+will output the average number of selected mutant homozygous loci in a deme:
 ![alt text](https://github.com/HartreeY/RESK/blob/master/img/readme0.gif?raw=true)
 
 Here's an example of a deme-average fitness heatmap of a longer axial simulation in 2D:
 ```
-test = rangeexp_strip(100,1000;data_to_generate="FPSN",y_max=8,migr_mode="diag1/2")
+test = rangeexp_strip(100,1000;data_to_generate="Fl",y_max=8,migr_mode="diag1/2")
+re_heatmap(test, "fitn")
 ```
 ![alt text](https://github.com/HartreeY/RESK/blob/master/img/readme1.gif?raw=true)
 
@@ -274,9 +272,7 @@ Shows *[dataname]* data of `re` from `gen_start` to `gen_end`. For example, `re_
 See `re_heatmap` for more.
 
 ## To do
-- implement beneficial mutations for finite-sites
 - include the possibility of multiple and partial range expansions
-- include total mutation count as output too
-- add proper error catching
-- add elitism, proper epistasis, fitness landscapes (rugged etc.), assortative mating etc.
-- implement migration with multiple-deme leaps 
+- add elitism, proper epistasis, fitness landscapes (rugged etc.), assortative mating
+- implement migration with multiple-deme leaps
+- decide on the graphical interface

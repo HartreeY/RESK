@@ -329,7 +329,7 @@ Shows an animated heatstack (3d heatmap) of `dataname` in `re`.
 
 `kwargs...`: any Plots.jl parameters
 """
-function re_heatstack(re::OrderedDict, dataname::String, gen_start=1, gen_end=re["stats"]["n_gens"]; re_index::Int = 1, defc=false, clim=NaN, x_range=1:re["stats"]["max"][1], z_range=1:re["stats"]["max"][3], title="", n_gens_burnin=re["stats"]["n_gens_burnin"], kwargs...)
+function re_heatstack(re::OrderedDict, dataname::String, gen_start=1, gen_end=re["stats"]["n_gens"]; re_index::Int = 1, defc=false, clim=nothing, x_range=1:re["stats"]["max"][1], z_range=1:re["stats"]["max"][3], title="", n_gens_burnin=re["stats"]["n_gens_burnin"], kwargs...)
     if !isa(re[dataname], Array)
         println("This data was not generated.")
     else
