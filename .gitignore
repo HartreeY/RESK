@@ -1,8 +1,8 @@
 # ----- comment out on dev ------
-#old/
-#pkg/
-#rangeexp_project/
-#dev/
+old/
+pkg/
+rangeexp_project/
+dev/
 
 # ------------- all -------------
 study/data/
