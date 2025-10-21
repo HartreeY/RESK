@@ -637,13 +637,15 @@ function build_next_gen!(g, gg, out_fields, wld_gt1::typ_gt, wld_gt2::typ_gt, st
             if out_fields["cAA"][1]
                 G = out_fields["cAA"][2] ? g+1 : 1
                 for ww in 1:stats["n_loci"]
-                    wld_cAA[deme...,ww,G]=cAA[ww]
-                    wld_cAa[deme...,ww,G]=cAa[ww]
-                    wld_caa[deme...,ww,G]=caa[ww]
+                    lenn = length(ms1_at_pos)
+                    wld_cAA[deme...,ww,G]=relcnt ? cAA[ww]/lenn : cAA[ww]
+                    wld_cAa[deme...,ww,G]=relcnt ? cAa[ww]/lenn : cAa[ww]
+                    wld_caa[deme...,ww,G]=relcnt ? caa[ww]/lenn : caa[ww]
                 end
             end
             if out_fields["AA"][1]
                 G = out_fields["AA"][2] ? g+1 : 1
+                lenn = length(ms1_at_pos)
                 wld_AA[deme...,G] = relcnt ? sum(cAA)/stats["n_loci"]/lenn : sum(cAA)/stats["n_loci"]
                 wld_Aa[deme...,G] = relcnt ? sum(cAa)/stats["n_loci"]/lenn : sum(cAa)/stats["n_loci"]
                 wld_aa[deme...,G] = relcnt ? sum(caa)/stats["n_loci"]/lenn : sum(caa)/stats["n_loci"]
@@ -1094,12 +1096,12 @@ Output: a Dict containing data after the expansion:
 function rangeexp_ray(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; x_max_burnin=DEF_X_MAX_BURNIN, x_max_exp=DEF_X_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, weightfitn=true, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, capacity=DEF_CAPACITY,
-    prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, condsel=false, fixed_mate=false, SS=true, verbose=false)
+    prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, condsel=false, fixed_mate=false, SS=true, verbose=false, relcnt=false)
 
     rangeexp(n_gens_burnin, n_gens_exp, n_re; max_burnin=(x_max_burnin,), max_exp=(x_max_exp,), maxi=(x_max_exp,), startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci, weightfitn=weightfitn, 
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, multiproc=multiproc, condsel=condsel, fixed_mate=fixed_mate,
-        SS=SS, verbose=verbose, prop_of_del_muts=prop_of_del_muts)
+        SS=SS, verbose=verbose, prop_of_del_muts=prop_of_del_muts, relcnt=relcnt)
 end
 
 const rangeexp_1d = rangeexp_ray
