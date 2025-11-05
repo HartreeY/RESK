@@ -1,7 +1,7 @@
 using StatsBase, Distributions, Distributed, Random, Serialization, Dates, DataStructures#, ThreadsX #SpecialFunctions
 include("defaults.jl")
 
-const RESK_VERSION = v"0.5.1"
+const RESK_VERSION = v"0.5.2"
 
 # Constants
 # ------------------------------------------------
@@ -862,7 +862,7 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, r_max_burnin=0, r_max_exp=0, r_coords=[1, 2], capacity=DEF_CAPACITY, prolif_rate=DEF_PROLIF_RATE,
     prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, verbose=false, condsel=false, fixed_mate=false, startfill_iter=nothing, relcnt=false,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci), mutratelocus=false, weightfitn=true, 
-    startfill_range=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, SS=true)
+    startfill_range=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, SS=true, drop_last_dim=false)
     
     if isnan(wld_gt1)
         is_fill_random_demes = true
@@ -993,10 +993,11 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
         "cAA" => rewld_cAA_local, "cAa" => rewld_cAa_local, "caa" => rewld_caa_local)
     end
 
-    extra_dim = 0
-
-    if n_re > 1
+    extra_dim = 1
+    if !drop_last_dim
         extra_dim += 1
+    end
+    if n_re > 1
         if multiproc
             npcs = workers()
             println("Running $n_re replicates on processes $npcs.")
@@ -1014,20 +1015,20 @@ function rangeexp(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_
     end
 
     res = OrderedDict{String, Any}("stats" => wld_stats)
-
+    
     for key in keys(out_fields)
         if out_fields[key][1]
             if out_fields[key][2]
                 if key=="cAA" || key=="cAa" || key=="caa" || key=="gt"
                     res[key] = cat([dictus[key] for dictus in dicts_out]...,dims=wlddim+extra_dim+1)
                 else
-                    res[key] = cat([dictus[key] for dictus in dicts_out]...,dims=wlddim+extra_dim+1)
+                    res[key] = cat([dictus[key] for dictus in dicts_out]...,dims=wlddim+extra_dim)
                 end
             else
                 if key=="gt"
-                    res[key] = cat([dictus[key][repeat([:],wlddim)...,1] for dictus in dicts_out]...,dims=wlddim+extra_dim)
+                    res[key] = cat([dictus[key][repeat([:],wlddim)...,1] for dictus in dicts_out]...,dims=wlddim+extra_dim+1)
                 elseif key=="mutsdel" || key=="mutsben"
-                    res[key] = cat([dictus[key][repeat([:],wlddim)...,1] for dictus in dicts_out]...,dims=wlddim+extra_dim)
+                    res[key] = cat([dictus[key][repeat([:],wlddim)...,1] for dictus in dicts_out]...,dims=wlddim+extra_dim+1)
                 else
                     res[key] = cat([dictus[key][repeat([:],wlddim)...,1] for dictus in dicts_out]...,dims=wlddim+extra_dim)
                 end
@@ -1096,12 +1097,12 @@ Output: a Dict containing data after the expansion:
 function rangeexp_ray(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; x_max_burnin=DEF_X_MAX_BURNIN, x_max_exp=DEF_X_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, weightfitn=true, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, capacity=DEF_CAPACITY,
-    prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, condsel=false, fixed_mate=false, SS=true, verbose=false, relcnt=false)
+    prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, condsel=false, fixed_mate=false, SS=true, verbose=false, relcnt=false, drop_last_dim=false)
 
     rangeexp(n_gens_burnin, n_gens_exp, n_re; max_burnin=(x_max_burnin,), max_exp=(x_max_exp,), maxi=(x_max_exp,), startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci, weightfitn=weightfitn, 
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, multiproc=multiproc, condsel=condsel, fixed_mate=fixed_mate,
-        SS=SS, verbose=verbose, prop_of_del_muts=prop_of_del_muts, relcnt=relcnt)
+        SS=SS, verbose=verbose, prop_of_del_muts=prop_of_del_muts, relcnt=relcnt, drop_last_dim=drop_last_dim)
 end
 
 const rangeexp_1d = rangeexp_ray
@@ -1109,12 +1110,13 @@ const rangeexp_1d = rangeexp_ray
 function rangeexp_linear(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, maxi=(r_max_exp * 2 + 1,), 
     migr_mode=DEF_MIGR_MODE, startfill_range=[(1-ceil(Int,r_max_burnin/2)+r_max_exp):(1+ceil(Int,r_max_burnin/2)+r_max_exp)], prolif_rate=DEF_PROLIF_RATE, max_exp=(NaN,NaN), max_burnin=(NaN,NaN),
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, capacity=DEF_CAPACITY)
+    data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, multiproc=true, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, capacity=DEF_CAPACITY,
+    drop_last_dim=false)
 
     rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci, r_coords=[1],
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, multiproc=multiproc, condsel=condsel, fixed_mate=fixed_mate,
-        SS=SS, verbose=verbose, prop_of_del_muts=prop_of_del_muts)
+        SS=SS, verbose=verbose, prop_of_del_muts=prop_of_del_muts, drop_last_dim=drop_last_dim)
 end
 
 
@@ -1183,12 +1185,12 @@ function rangeexp_strip(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_E
     prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, SS=true, verbose=false, relcnt=false,
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=("midhole at x=", x_max_burnin * 2), prolif_rate=DEF_PROLIF_RATE,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, capacity=DEF_CAPACITY, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, max_burnin=(x_max_burnin, y_max), max_exp=(x_max_exp, y_max), maxi=(x_max_exp, y_max), multiproc=true)
+    wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, max_burnin=(x_max_burnin, y_max), max_exp=(x_max_exp, y_max), maxi=(x_max_exp, y_max), multiproc=true, drop_last_dim=false)
     
     rangeexp(n_gens_burnin, n_gens_exp, n_re; max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, startfill_range=startfill_range, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, capacity=capacity, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, multiproc=multiproc, SS=SS, verbose=verbose,
-        weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, prop_of_del_muts=prop_of_del_muts, relcnt=relcnt)
+        weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, prop_of_del_muts=prop_of_del_muts, relcnt=relcnt, drop_last_dim=drop_last_dim)
 end
 
 """
@@ -1253,7 +1255,7 @@ Output: a Dict containing data after the expansion:
 function rangeexp_disk(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN, prolif_rate=DEF_PROLIF_RATE, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, SS=true, verbose=false,
     data_to_generate=DEF_DATA_TO_GENERATE, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1), capacity=DEF_CAPACITY,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    max_exp=(NaN,NaN), max_burnin=(NaN,NaN), wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN)
+    max_exp=(NaN,NaN), max_burnin=(NaN,NaN), wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, drop_last_dim=false)
 
     if !isa(startfill_range, Array)
         ran = ins_sq(r_max_burnin, maxi[1])
@@ -1262,7 +1264,7 @@ function rangeexp_disk(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EX
 
     rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, startfill_range=startfill_range, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, SS=SS, verbose=verbose, 
-        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck)
+        migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, drop_last_dim=drop_last_dim)
 end
 
 function rangeexp_cylinder(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max=DEF_R_MAX_BURNIN, r_max_burnin=r_max, r_max_exp=r_max, migr_mode=DEF_MIGR_MODE, 
@@ -1270,7 +1272,7 @@ function rangeexp_cylinder(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GEN
     z_max_burnin=DEF_X_MAX_BURNIN, z_max_exp=DEF_X_MAX_EXP, max_burnin=(NaN, NaN, z_max_burnin), max_exp=(NaN, NaN, z_max_exp), maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, z_max_exp), capacity=DEF_CAPACITY,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
     data_to_generate=DEF_DATA_TO_GENERATE, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, multiproc=true, 
-    SS=true, verbose=false, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false)
+    SS=true, verbose=false, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false,drop_last_dim=false)
 
     if !isa(startfill_range, Array)
         ran = ins_sq(r_max_burnin, maxi[1])
@@ -1280,14 +1282,14 @@ function rangeexp_cylinder(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GEN
     rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi,
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, capacity=capacity, prolif_rate=prolif_rate,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
-        startfill_range=startfill_range, multiproc=multiproc, SS=SS, verbose=verbose, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate)
+        startfill_range=startfill_range, multiproc=multiproc, SS=SS, verbose=verbose, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, drop_last_dim=drop_last_dim)
 end
 
 function rangeexp_sphere(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_EXP, n_re=1; r_max_burnin=DEF_R_MAX_BURNIN, r_max_exp=DEF_R_MAX_EXP, migr_mode=DEF_MIGR_MODE, startfill_range=NaN,startfill_iter=NaN,
     max_burnin=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), max_exp=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), maxi=(r_max_exp * 2 + 1, r_max_exp * 2 + 1, r_max_exp * 2 + 1), capacity=DEF_CAPACITY,
      prolif_rate=DEF_PROLIF_RATE, prop_of_del_muts=DEF_PROP_OF_DEL_MUTS, weightfitn=true, condsel=false, fixed_mate=false, SS=true, verbose=false,
     mut_rate=DEF_MUT_RATE, migr_rate=DEF_MIGR_RATE, sel_coef=DEF_SEL_COEF, domin_coef=DEF_DOMIN_COEF, mutratelocus=false, n_loci=DEF_N_LOCI, n_sel_loci=ceil(Int,n_loci/2), loci=fill(sel_coef,n_loci),
-    data_to_generate=DEF_DATA_TO_GENERATE, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN)
+    data_to_generate=DEF_DATA_TO_GENERATE, wld_gt1=NaN, wld_gt2=NaN, wld_stats=NaN, name=Dates.format(Dates.now(), dateformat"yyyy-mm-dd_HH-MM-SS"), bottleneck=NaN, drop_last_dim=false)
 
     if iterate(startfill_iter) !== nothing
         startfill_iter = sphere_lattice_iter(maxi[1]/2,maxi[2]/2,maxi[3]/2,r_max_burnin)
@@ -1296,7 +1298,7 @@ function rangeexp_sphere(n_gens_burnin=DEF_N_GENS_BURNIN, n_gens_exp=DEF_N_GENS_
     rangeexp(n_gens_burnin, n_gens_exp, n_re; r_max_burnin=r_max_burnin, r_max_exp=r_max_exp, max_burnin=max_burnin, max_exp=max_exp, maxi=maxi, r_coords=[1, 2, 3], prolif_rate=prolif_rate,
         migr_mode=migr_mode, data_to_generate=data_to_generate, wld_gt1=wld_gt1, wld_gt2=wld_gt2, wld_stats=wld_stats, name=name, bottleneck=bottleneck, capacity=capacity,
         mut_rate=mut_rate, migr_rate=migr_rate, sel_coef=sel_coef, domin_coef=domin_coef, mutratelocus=mutratelocus, n_loci=n_loci, n_sel_loci=n_sel_loci, loci=loci,
-        startfill_range=startfill_range, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, SS=SS, verbose=verbose, startfill_iter=startfill_iter)
+        startfill_range=startfill_range, prop_of_del_muts=prop_of_del_muts, weightfitn=weightfitn, condsel=condsel, fixed_mate=fixed_mate, SS=SS, verbose=verbose, startfill_iter=startfill_iter, drop_last_dim=drop_last_dim)
 end
 
 
@@ -2643,13 +2645,15 @@ macro d(x)
 end =#
 
 function af_A(re,deme,locus,gen=re["stats"]["n_gens"],re_index=1)
-    return (2*re["cAA"][deme...,locus,gen,re_index]+re["cAa"][deme...,locus,gen,re_index])/re["stats"]["n_loci"]
+    the = 2*re["pops"][deme...,gen,re_index]
+    return (2*re["cAA"][deme...,locus,gen,re_index]+re["cAa"][deme...,locus,gen,re_index])/the
 end
 
 # TO-DO!!! Test if this == re["A"]
 
 function af_a(re,deme,locus,gen=re["stats"]["n_gens"],re_index=1)
-    return (2*re["caa"][deme...,locus,gen,re_index]+re["cAa"][deme...,locus,gen,re_index])/re["stats"]["n_loci"]
+    the = 2*re["pops"][deme...,gen,re_index]
+    return (2*re["caa"][deme...,locus,gen,re_index]+re["cAa"][deme...,locus,gen,re_index])/the
 end
 
 function twopq(re,deme,locus::Int,gen=re["stats"]["n_gens"],re_index=1)
