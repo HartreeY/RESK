@@ -8,6 +8,8 @@ To begin using this set of tools, you need to have Julia 1.9+ installed, along w
 
 Once you have the required packages, you can use the documented methods of this package on your own, or you can follow one of several examples in the *programs/examples* folder.
 
+In Jupyter notebooks, function documentation on hover is not possible in Julia for imported packages, so we recommend checking it like so: `@doc rangeexp_ray`.
+
 ### Main files
 RESK consists of just a couple of files:
 - *resk.jl*: main methods
